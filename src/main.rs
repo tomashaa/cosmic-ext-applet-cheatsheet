@@ -5,8 +5,8 @@
 // Native libcosmic port of the GTK `cosmic-cheatsheet` from clip-suite.
 
 mod config;
-mod data;
 mod i18n;
+mod shortcuts;
 mod window;
 
 use window::Window;
@@ -47,6 +47,15 @@ fn run_window() -> cosmic::iced::Result {
 fn main() -> cosmic::iced::Result {
     let env = env_logger::Env::default().filter_or("RUST_LOG", "warn");
     env_logger::init_from_env(env);
+
+    // Debug: print the parsed actual shortcuts and exit.
+    if std::env::args().any(|a| a == "--dump-shortcuts") {
+        for s in shortcuts::load() {
+            let cmd = s.command.as_ref().map(|c| c.join(" ")).unwrap_or_default();
+            println!("[{}] {:28} {:32} {}", s.section, s.keys, s.label, cmd);
+        }
+        return Ok(());
+    }
 
     // `--window`: open the cheat sheet as a standalone window (for a keybind
     // like Super+C). Otherwise run as a COSMIC panel applet.

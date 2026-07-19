@@ -9,7 +9,6 @@ use cosmic::widget;
 use cosmic::Element;
 
 use crate::config::{self, CustomShortcut};
-use crate::data::{ACTIONS, SECTIONS};
 use crate::i18n;
 
 const ID: &str = "io.github.tomashaa.CosmicExtCheatsheet";
@@ -37,6 +36,8 @@ pub struct Window {
     search: String,
     search_id: cosmic::widget::Id,
     scroll_id: cosmic::widget::Id,
+    /// Actual COSMIC shortcuts read from config (defaults + user custom).
+    shortcuts: Vec<crate::shortcuts::Shortcut>,
     custom: Vec<CustomShortcut>,
     lang: &'static str,
     mode: Mode,
@@ -66,6 +67,7 @@ impl Default for Window {
             search: state.search,
             search_id: cosmic::widget::Id::unique(),
             scroll_id: cosmic::widget::Id::unique(),
+            shortcuts: crate::shortcuts::load(),
             custom: config::load(),
             lang: crate::i18n::current_lang(),
             mode: Mode::default(),
@@ -231,10 +233,14 @@ impl Window {
     fn nav_commands(&self) -> Vec<Vec<String>> {
         let q = self.search.to_lowercase();
         let mut out: Vec<Vec<String>> = Vec::new();
-        for a in ACTIONS {
-            let label = i18n::tr(self.lang, a.label_key);
-            if matches(&q, label, a.keys) {
-                out.push(a.command.iter().map(|s| s.to_string()).collect());
+        for (sec_key, _) in crate::shortcuts::SECTION_ORDER {
+            for s in &self.shortcuts {
+                if s.section != *sec_key || !matches(&q, &s.label, &s.keys) {
+                    continue;
+                }
+                if let Some(cmd) = &s.command {
+                    out.push(cmd.clone());
+                }
             }
         }
         let custom: Vec<&CustomShortcut> = self
@@ -281,42 +287,26 @@ impl Window {
             .into(),
         );
 
-        // Clickable actions.
-        let mut acts: Vec<Element<Message>> = Vec::new();
+        // Actual COSMIC shortcuts, grouped by section. Clickable rows (Spawn
+        // bindings) launch on click/Enter; the rest are reference.
         let mut ci = 0usize; // clickable-row index, matches nav_commands()
-        for a in ACTIONS {
-            let label = i18n::tr(self.lang, a.label_key);
-            if !matches(&q, label, a.keys) {
-                continue;
-            }
-            let argv: Vec<String> = a.command.iter().map(|s| s.to_string()).collect();
-            acts.push(row_view(
-                format!("{}  {}", a.icon, label),
-                a.keys.to_string(),
-                Some(argv),
-                self.selected == ci,
-            ));
-            ci += 1;
-        }
-        if !acts.is_empty() {
-            children.push(heading_view(i18n::tr(self.lang, "ui.actions")));
-            children.extend(acts);
-        }
-
-        // Informational sections.
-        for s in SECTIONS {
+        for (sec_key, sec_title) in crate::shortcuts::SECTION_ORDER {
             let mut rows: Vec<Element<Message>> = Vec::new();
-            for &(label_key, k) in s.rows {
-                let l = i18n::tr(self.lang, label_key);
-                if !matches(&q, l, k) {
+            for s in &self.shortcuts {
+                if s.section != *sec_key || !matches(&q, &s.label, &s.keys) {
                     continue;
                 }
-                rows.push(row_view(l.to_string(), k.to_string(), None, false));
+                let clickable = s.command.is_some();
+                let sel = clickable && self.selected == ci;
+                rows.push(row_view(s.label.clone(), s.keys.clone(), s.command.clone(), sel));
+                if clickable {
+                    ci += 1;
+                }
             }
             if rows.is_empty() {
                 continue;
             }
-            children.push(heading_view(i18n::tr(self.lang, s.title_key)));
+            children.push(heading_view(sec_title));
             children.extend(rows);
         }
 
