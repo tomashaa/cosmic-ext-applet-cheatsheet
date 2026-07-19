@@ -11,8 +11,10 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
 [dependencies.libcosmic]
-# TODO before publishing: switch to `git = "https://github.com/pop-os/libcosmic"`.
-# Local patched checkout is used here because it matches the API this was built against.
-path = "/home/tomashaaland/projects/skykeeper/libcosmic-patched"
+# Pinned to the libcosmic revision matching the installed cosmic-comp
+# (built 2026-07-09). Master is newer and mismatches this compositor's
+# corner-radius protocol (crash on resume) and theme schema (list_button).
+git = "https://github.com/pop-os/libcosmic"
+rev = "c44dbe7"
 default-features = false
 features = ["applet-token"]
