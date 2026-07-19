@@ -66,11 +66,23 @@ fn row_view(
     ])
     .spacing(12);
 
+    let clickable = argv.is_some();
     let mut cell = widget::container(content).width(Length::Fill).padding(8);
-    if dim {
+    if clickable {
+        // Faint accent tint marks a row as clickable (a "link").
+        cell = cell.class(cosmic::theme::Container::custom(|theme| {
+            let mut c: cosmic::iced::Color = theme.cosmic().accent_color().into();
+            c.a = 0.10;
+            cosmic::widget::container::Style {
+                background: Some(cosmic::iced::Background::Color(c)),
+                ..Default::default()
+            }
+        }));
+    } else if dim {
+        // Subtle zebra stripe on informational rows for readability.
         cell = cell.class(cosmic::theme::Container::custom(|theme| {
             let mut c: cosmic::iced::Color = theme.cosmic().primary_container_divider().into();
-            c.a = 0.35;
+            c.a = 0.14;
             cosmic::widget::container::Style {
                 background: Some(cosmic::iced::Background::Color(c)),
                 ..Default::default()
