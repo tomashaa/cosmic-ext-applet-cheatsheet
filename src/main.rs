@@ -36,9 +36,9 @@ fn run_window() -> cosmic::iced::Result {
         return Ok(());
     }
     let _ = std::fs::write(&pidf, std::process::id().to_string());
-    let settings = cosmic::app::Settings::default()
-        .size(cosmic::iced::Size::new(480.0, 620.0))
-        .is_daemon(false);
+    // No main window: the cheat sheet lives in a top-anchored layer surface
+    // created in Window::init (see window.rs).
+    let settings = cosmic::app::Settings::default().no_main_window(true);
     let result = cosmic::app::run::<Window>(settings, true);
     let _ = std::fs::remove_file(&pidf);
     result

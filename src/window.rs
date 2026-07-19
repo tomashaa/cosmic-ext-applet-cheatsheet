@@ -370,14 +370,42 @@ impl cosmic::Application for Window {
     }
 
     fn init(core: Core, windowed: Self::Flags) -> (Self, Task<Message>) {
-        (
-            Window {
-                core,
-                windowed,
-                ..Default::default()
-            },
-            Task::none(),
-        )
+        let mut window = Window {
+            core,
+            windowed,
+            ..Default::default()
+        };
+        let task = if windowed {
+            // Layer surfaces always try to apply a corner radius, which errors
+            // on cosmic_corner_radius_layer_v1 with this compositor. Drop the
+            // System auto-corner-radius so no corner-radius request is sent.
+            window
+                .core
+                .set_auto_corner_radius(cosmic::core::Auto::Window | cosmic::core::Auto::Popup);
+            // Standalone: show the cheat sheet in a layer surface anchored to
+            // the top edge (drops down from the top like the old GTK panel).
+            cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(
+                cosmic::surface::action::app_layer_shell::<Window>(
+                    |_app| cosmic::surface::action::LiveSettings::default(),
+                    |_app: &mut Window| {
+                        use cosmic::cctk::sctk::shell::wlr_layer::{Anchor, KeyboardInteractivity};
+                        cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings {
+                            anchor: Anchor::TOP,
+                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                            size: Some((Some(480), Some(600))),
+                            namespace: "cheatsheet".to_string(),
+                            ..Default::default()
+                        }
+                    },
+                    Some(Box::new(|app: &Window| {
+                        Element::from(app.body()).map(cosmic::Action::App)
+                    })),
+                ),
+            )))
+        } else {
+            Task::none()
+        };
+        (window, task)
     }
 
     fn on_close_requested(&self, id: window::Id) -> Option<Message> {
