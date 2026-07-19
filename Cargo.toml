@@ -1,0 +1,18 @@
+[package]
+name = "cosmic-ext-applet-cheatsheet"
+version = "0.1.0"
+edition = "2021"
+description = "A COSMIC panel applet: a searchable keyboard-shortcut cheat sheet with user-defined custom shortcuts"
+
+[dependencies]
+env_logger = "0.10"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[dependencies.libcosmic]
+# TODO before publishing: switch to `git = "https://github.com/pop-os/libcosmic"`.
+# Local patched checkout is used here because it matches the API this was built against.
+path = "/home/tomashaaland/projects/skykeeper/libcosmic-patched"
+default-features = false
+features = ["applet-token"]

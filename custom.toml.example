@@ -1,0 +1,12 @@
+# Copy to ~/.config/cosmic-ext-cheatsheet/custom.toml and edit.
+# Each [[shortcut]] adds a row to the cheat sheet.
+
+[[shortcut]]
+label = "My screenshot tool"
+keys = "Super + Shift + M"
+command = "my-tool --flag"   # optional; if present the row is clickable
+section = "My tools"          # optional grouping (defaults to "Custom")
+
+[[shortcut]]
+label = "Build server IP"
+keys = "10.0.0.5"             # informational only (no command)
