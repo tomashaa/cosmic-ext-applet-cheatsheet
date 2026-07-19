@@ -6,6 +6,7 @@
 
 mod config;
 mod data;
+mod i18n;
 mod window;
 
 use window::Window;

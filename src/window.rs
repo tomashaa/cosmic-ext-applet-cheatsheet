@@ -11,6 +11,7 @@ use cosmic::Element;
 
 use crate::config::{self, CustomShortcut};
 use crate::data::{ACTIONS, SECTIONS};
+use crate::i18n;
 
 const ID: &str = "io.github.tomashaa.CosmicExtCheatsheet";
 
@@ -19,6 +20,7 @@ pub struct Window {
     popup: Option<Id>,
     search: String,
     custom: Vec<CustomShortcut>,
+    lang: &'static str,
 }
 
 impl Default for Window {
@@ -28,6 +30,7 @@ impl Default for Window {
             popup: None,
             search: String::new(),
             custom: config::load(),
+            lang: crate::i18n::current_lang(),
         }
     }
 }
@@ -135,47 +138,45 @@ impl Window {
         let mut children: Vec<Element<Message>> = Vec::new();
 
         children.push(
-            widget::text_input::search_input("Search shortcuts…", &self.search)
+            widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
                 .on_input(Message::Search)
                 .into(),
         );
 
         // Clickable actions.
         let mut acts: Vec<Element<Message>> = Vec::new();
-        let mut i = 0;
         for a in ACTIONS {
-            if !matches(&q, a.label, a.keys) {
+            let label = i18n::tr(self.lang, a.label_key);
+            if !matches(&q, label, a.keys) {
                 continue;
             }
             let argv: Vec<String> = a.command.iter().map(|s| s.to_string()).collect();
             acts.push(row_view(
-                format!("{}  {}", a.icon, a.label),
+                format!("{}  {}", a.icon, label),
                 a.keys.to_string(),
                 Some(argv),
-                i % 2 == 1,
+                false,
             ));
-            i += 1;
         }
         if !acts.is_empty() {
-            children.push(heading_view("Actions"));
+            children.push(heading_view(i18n::tr(self.lang, "ui.actions")));
             children.extend(acts);
         }
 
         // Informational sections.
         for s in SECTIONS {
             let mut rows: Vec<Element<Message>> = Vec::new();
-            let mut j = 0;
-            for &(l, k) in s.rows {
+            for &(label_key, k) in s.rows {
+                let l = i18n::tr(self.lang, label_key);
                 if !matches(&q, l, k) {
                     continue;
                 }
-                rows.push(row_view(l.to_string(), k.to_string(), None, j % 2 == 0));
-                j += 1;
+                rows.push(row_view(l.to_string(), k.to_string(), None, false));
             }
             if rows.is_empty() {
                 continue;
             }
-            children.push(heading_view(s.title));
+            children.push(heading_view(i18n::tr(self.lang, s.title_key)));
             children.extend(rows);
         }
 
