@@ -4,8 +4,8 @@
 use cosmic::app::{Core, Task};
 use cosmic::iced::core::window;
 use cosmic::iced::window::Id;
-use cosmic::iced::{Length, Limits, Rectangle};
-use cosmic::surface::action::{app_popup, destroy_popup};
+use cosmic::iced::Length;
+use cosmic::surface::action::destroy_popup;
 use cosmic::widget;
 use cosmic::Element;
 
@@ -66,6 +66,7 @@ pub enum Message {
     Surface(cosmic::surface::Action),
     Search(String),
     Launch(Vec<String>),
+    ToggleWindow,
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -443,6 +444,13 @@ impl cosmic::Application for Window {
             Message::Search(q) => {
                 self.search = q;
             }
+            Message::ToggleWindow => {
+                // Open (or toggle) the standalone top-anchored surface, same as
+                // the Super+C keybind, so the icon and keybind match.
+                if let Ok(exe) = std::env::current_exe() {
+                    let _ = std::process::Command::new(exe).arg("--window").spawn();
+                }
+            }
             Message::Launch(argv) => {
                 spawn(&argv);
                 if self.windowed {
@@ -506,55 +514,17 @@ impl cosmic::Application for Window {
         if self.windowed {
             return self.body();
         }
-        let have_popup = self.popup;
+        // Clicking the panel icon opens the same top-anchored surface as Super+C.
         let btn = self
             .core
             .applet
             .icon_button("input-keyboard-symbolic")
-            .on_press_with_rectangle(move |offset, bounds| {
-                if let Some(id) = have_popup {
-                    Message::Surface(destroy_popup(id))
-                } else {
-                    Message::Surface(app_popup::<Window>(
-                        |_| Default::default(),
-                        move |state: &mut Window| {
-                            let new_id = Id::unique();
-                            state.popup = Some(new_id);
-                            state.search.clear();
-                            let mut popup_settings = state.core.applet.get_popup_settings(
-                                state.core.main_window_id().unwrap(),
-                                new_id,
-                                None,
-                                None,
-                                None,
-                            );
-                            popup_settings.positioner.anchor_rect = Rectangle {
-                                x: (bounds.x - offset.x) as i32,
-                                y: (bounds.y - offset.y) as i32,
-                                width: bounds.width as i32,
-                                height: bounds.height as i32,
-                            };
-                            // Lock the popup size so it opens at its final size
-                            // instead of momentarily rendering zoomed-in.
-                            popup_settings.positioner.size_limits = Limits::NONE
-                                .min_width(440.0)
-                                .max_width(440.0)
-                                .min_height(200.0)
-                                .max_height(640.0);
-                            popup_settings
-                        },
-                        Some(Box::new(move |state: &Window| {
-                            Element::from(state.core.applet.popup_container(state.body()))
-                                .map(cosmic::Action::App)
-                        })),
-                    ))
-                }
-            });
+            .on_press(Message::ToggleWindow);
 
         Element::from(self.core.applet.applet_tooltip::<Message>(
             btn,
             "Keyboard shortcuts",
-            self.popup.is_some(),
+            false,
             Message::Surface,
             None,
         ))
