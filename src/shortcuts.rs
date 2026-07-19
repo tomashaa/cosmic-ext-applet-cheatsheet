@@ -225,14 +225,16 @@ pub fn load() -> Vec<Shortcut> {
     out
 }
 
-/// Section headings in display order.
+/// Section headings in display order. Applications (the user's clickable app
+/// bindings) come first so they're immediately visible; the COSMIC reference
+/// shortcuts follow.
 pub const SECTION_ORDER: &[(&str, &str)] = &[
+    ("sec.apps", "Applications"),
+    ("sec.system", "System"),
     ("sec.window", "Windows"),
     ("sec.focus", "Focus & move"),
     ("sec.ws", "Workspaces"),
     ("sec.monitor", "Monitors"),
     ("sec.zoom", "Zoom"),
-    ("sec.system", "System"),
-    ("sec.apps", "Applications"),
     ("sec.other", "Other"),
 ];
