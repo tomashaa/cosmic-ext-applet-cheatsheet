@@ -40,6 +40,8 @@ pub struct Window {
     lang: &'static str,
     mode: Mode,
     form: Form,
+    /// Index of the keyboard-selected clickable row (into `nav_commands()`).
+    selected: usize,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
 }
@@ -54,6 +56,7 @@ impl Default for Window {
             lang: crate::i18n::current_lang(),
             mode: Mode::default(),
             form: Form::default(),
+            selected: 0,
             windowed: false,
         }
     }
@@ -67,6 +70,10 @@ pub enum Message {
     ToggleWindow,
     Close,
     Ignore,
+    Focus,
+    NavUp,
+    NavDown,
+    NavActivate,
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -105,7 +112,7 @@ fn row_view(
     label: String,
     keys: String,
     argv: Option<Vec<String>>,
-    _dim: bool,
+    selected: bool,
 ) -> Element<'static, Message> {
     let clickable = argv.is_some();
 
@@ -144,7 +151,7 @@ fn row_view(
     .spacing(12)
     .align_y(cosmic::iced::Alignment::Center);
 
-    let cell = widget::container(content)
+    let mut cell = widget::container(content)
         .width(Length::Fill)
         .padding(cosmic::iced::Padding {
             top: 6.0,
@@ -152,6 +159,21 @@ fn row_view(
             bottom: 6.0,
             left: 8.0,
         });
+    if selected {
+        // Keyboard-highlighted row: accent-tinted background.
+        cell = cell.class(cosmic::theme::Container::custom(|theme| {
+            let mut c: cosmic::iced::Color = theme.cosmic().accent_color().into();
+            c.a = 0.20;
+            cosmic::widget::container::Style {
+                background: Some(cosmic::iced::Background::Color(c)),
+                border: cosmic::iced::Border {
+                    radius: 6.0.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        }));
+    }
 
     match argv {
         Some(cmd) => widget::mouse_area(cell).on_press(Message::Launch(cmd)).into(),
@@ -184,6 +206,41 @@ impl Window {
         }
     }
 
+    /// Visible clickable rows' commands, in render order (ACTIONS first, then
+    /// custom shortcuts that have a command, grouped by section). The keyboard
+    /// selection (`self.selected`) indexes into this.
+    fn nav_commands(&self) -> Vec<Vec<String>> {
+        let q = self.search.to_lowercase();
+        let mut out: Vec<Vec<String>> = Vec::new();
+        for a in ACTIONS {
+            let label = i18n::tr(self.lang, a.label_key);
+            if matches(&q, label, a.keys) {
+                out.push(a.command.iter().map(|s| s.to_string()).collect());
+            }
+        }
+        let custom: Vec<&CustomShortcut> = self
+            .custom
+            .iter()
+            .filter(|c| matches(&q, &c.label, &c.keys))
+            .collect();
+        let mut sections: Vec<&str> = Vec::new();
+        for c in &custom {
+            let s = c.section_or_default();
+            if !sections.contains(&s) {
+                sections.push(s);
+            }
+        }
+        for sec in sections {
+            for c in custom.iter().filter(|c| c.section_or_default() == sec) {
+                let argv = c.argv();
+                if !argv.is_empty() {
+                    out.push(argv);
+                }
+            }
+        }
+        out
+    }
+
     fn list_body(&self) -> Element<'_, Message> {
         let q = self.search.to_lowercase();
         let mut children: Vec<Element<Message>> = Vec::new();
@@ -207,6 +264,7 @@ impl Window {
 
         // Clickable actions.
         let mut acts: Vec<Element<Message>> = Vec::new();
+        let mut ci = 0usize; // clickable-row index, matches nav_commands()
         for a in ACTIONS {
             let label = i18n::tr(self.lang, a.label_key);
             if !matches(&q, label, a.keys) {
@@ -217,8 +275,9 @@ impl Window {
                 format!("{}  {}", a.icon, label),
                 a.keys.to_string(),
                 Some(argv),
-                false,
+                self.selected == ci,
             ));
+            ci += 1;
         }
         if !acts.is_empty() {
             children.push(heading_view(i18n::tr(self.lang, "ui.actions")));
@@ -257,12 +316,19 @@ impl Window {
         }
         for sec in sections {
             children.push(heading_view(sec));
-            let mut j = 0;
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
                 let argv = c.argv();
-                let arg = if argv.is_empty() { None } else { Some(argv) };
-                children.push(row_view(c.label.clone(), c.keys.clone(), arg, j % 2 == 0));
-                j += 1;
+                let clickable = !argv.is_empty();
+                let arg = if clickable { Some(argv) } else { None };
+                children.push(row_view(
+                    c.label.clone(),
+                    c.keys.clone(),
+                    arg,
+                    clickable && self.selected == ci,
+                ));
+                if clickable {
+                    ci += 1;
+                }
             }
         }
 
@@ -458,6 +524,27 @@ impl cosmic::Application for Window {
         match message {
             Message::Search(q) => {
                 self.search = q;
+                self.selected = 0;
+            }
+            Message::Focus => {
+                return cosmic::widget::text_input::focus(self.search_id.clone());
+            }
+            Message::NavDown => {
+                let n = self.nav_commands().len();
+                if n > 0 {
+                    self.selected = (self.selected + 1).min(n - 1);
+                }
+            }
+            Message::NavUp => {
+                self.selected = self.selected.saturating_sub(1);
+            }
+            Message::NavActivate => {
+                if let Some(argv) = self.nav_commands().get(self.selected).cloned() {
+                    spawn(&argv);
+                    if self.windowed {
+                        std::process::exit(0);
+                    }
+                }
             }
             Message::ToggleWindow => {
                 // Open (or toggle) the standalone top-anchored surface, same as
@@ -547,22 +634,27 @@ impl cosmic::Application for Window {
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Message> {
-        if self.windowed {
-            cosmic::iced::event::listen_with(|event, _status, _id| {
-                use cosmic::iced::keyboard::{key::Named, Event as KeyEvent, Key};
-                if let cosmic::iced::Event::Keyboard(KeyEvent::KeyPressed {
-                    key: Key::Named(Named::Escape),
-                    ..
-                }) = event
-                {
-                    Some(Message::Close)
-                } else {
-                    None
-                }
-            })
-        } else {
-            cosmic::iced::Subscription::none()
+        if !self.windowed {
+            return cosmic::iced::Subscription::none();
         }
+        cosmic::iced::event::listen_with(|event, _status, _id| {
+            use cosmic::iced::keyboard::{key::Named, Event as KeyEvent, Key};
+            match event {
+                cosmic::iced::Event::Keyboard(KeyEvent::KeyPressed {
+                    key: Key::Named(named),
+                    ..
+                }) => match named {
+                    Named::Escape => Some(Message::Close),
+                    Named::ArrowDown => Some(Message::NavDown),
+                    Named::ArrowUp => Some(Message::NavUp),
+                    Named::Enter => Some(Message::NavActivate),
+                    _ => None,
+                },
+                // Focus the search field once the surface is up.
+                cosmic::iced::Event::Window(window::Event::Opened { .. }) => Some(Message::Focus),
+                _ => None,
+            }
+        })
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Message> {
