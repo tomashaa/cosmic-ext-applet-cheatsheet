@@ -398,7 +398,24 @@ impl cosmic::Application for Window {
                         }
                     },
                     Some(Box::new(|app: &Window| {
-                        Element::from(app.body()).map(cosmic::Action::App)
+                        // Opaque themed background so the surface isn't see-through.
+                        let panel = widget::container(app.body())
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .class(cosmic::theme::Container::custom(|theme| {
+                                let cosmic = theme.cosmic();
+                                cosmic::widget::container::Style {
+                                    background: Some(cosmic::iced::Background::Color(
+                                        cosmic.bg_color().into(),
+                                    )),
+                                    border: cosmic::iced::Border {
+                                        radius: 12.0.into(),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                }
+                            }));
+                        Element::from(panel).map(cosmic::Action::App)
                     })),
                 ),
             )))
