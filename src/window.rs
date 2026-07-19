@@ -15,12 +15,30 @@ use crate::i18n;
 
 const ID: &str = "io.github.tomashaa.CosmicExtCheatsheet";
 
+#[derive(Default, PartialEq)]
+enum Mode {
+    #[default]
+    List,
+    Edit,
+}
+
+/// Draft fields for the "add custom shortcut" form.
+#[derive(Default)]
+struct Form {
+    label: String,
+    keys: String,
+    command: String,
+    section: String,
+}
+
 pub struct Window {
     core: Core,
     popup: Option<Id>,
     search: String,
     custom: Vec<CustomShortcut>,
     lang: &'static str,
+    mode: Mode,
+    form: Form,
 }
 
 impl Default for Window {
@@ -31,6 +49,8 @@ impl Default for Window {
             search: String::new(),
             custom: config::load(),
             lang: crate::i18n::current_lang(),
+            mode: Mode::default(),
+            form: Form::default(),
         }
     }
 }
@@ -41,6 +61,14 @@ pub enum Message {
     Surface(cosmic::surface::Action),
     Search(String),
     Launch(Vec<String>),
+    OpenEditor,
+    CloseEditor,
+    FormLabel(String),
+    FormKeys(String),
+    FormCommand(String),
+    FormSection(String),
+    AddCustom,
+    DeleteCustom(usize),
 }
 
 fn spawn(argv: &[String]) {
@@ -53,6 +81,15 @@ fn spawn(argv: &[String]) {
 
 fn matches(q: &str, a: &str, b: &str) -> bool {
     q.is_empty() || a.to_lowercase().contains(q) || b.to_lowercase().contains(q)
+}
+
+fn non_empty(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 /// One cheat-sheet row: name on the left, shortcut on the right, optional
@@ -134,13 +171,30 @@ fn heading_view(title: &str) -> Element<'static, Message> {
 impl Window {
     /// Build the scrollable cheat-sheet body shown inside the popup.
     fn body(&self) -> Element<'_, Message> {
+        match self.mode {
+            Mode::List => self.list_body(),
+            Mode::Edit => self.edit_body(),
+        }
+    }
+
+    fn list_body(&self) -> Element<'_, Message> {
         let q = self.search.to_lowercase();
         let mut children: Vec<Element<Message>> = Vec::new();
 
+        // Search field + settings (gear) button.
         children.push(
-            widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
-                .on_input(Message::Search)
-                .into(),
+            widget::row::with_children(vec![
+                widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
+                    .on_input(Message::Search)
+                    .width(Length::Fill)
+                    .into(),
+                widget::button::text("⚙")
+                    .on_press(Message::OpenEditor)
+                    .into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
         );
 
         // Clickable actions.
@@ -209,6 +263,71 @@ impl Window {
             .height(Length::Fixed(540.0))
             .into()
     }
+
+    fn edit_body(&self) -> Element<'_, Message> {
+        let mut children: Vec<Element<Message>> = Vec::new();
+
+        // Header: back button + title.
+        children.push(
+            widget::row::with_children(vec![
+                widget::button::text("←").on_press(Message::CloseEditor).into(),
+                widget::text("Custom shortcuts")
+                    .size(15)
+                    .class(cosmic::theme::Text::Accent)
+                    .width(Length::Fill)
+                    .into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
+        );
+
+        // Existing custom shortcuts, each with a delete button.
+        if self.custom.is_empty() {
+            children.push(widget::text("No custom shortcuts yet.").size(12).into());
+        }
+        for (i, c) in self.custom.iter().enumerate() {
+            let row = widget::row::with_children(vec![
+                widget::text(c.label.clone()).width(Length::Fill).into(),
+                widget::text(c.keys.clone()).size(12).into(),
+                widget::button::text("✕").on_press(Message::DeleteCustom(i)).into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center);
+            children.push(widget::container(row).padding(6).into());
+        }
+
+        // Add form.
+        children.push(heading_view("Add"));
+        children.push(
+            widget::text_input::text_input("Name", &self.form.label)
+                .on_input(Message::FormLabel)
+                .into(),
+        );
+        children.push(
+            widget::text_input::text_input("Shortcut (e.g. Super + C)", &self.form.keys)
+                .on_input(Message::FormKeys)
+                .into(),
+        );
+        children.push(
+            widget::text_input::text_input("Command (optional)", &self.form.command)
+                .on_input(Message::FormCommand)
+                .into(),
+        );
+        children.push(
+            widget::text_input::text_input("Section (optional)", &self.form.section)
+                .on_input(Message::FormSection)
+                .into(),
+        );
+        children.push(
+            widget::button::text("+ Add")
+                .on_press(Message::AddCustom)
+                .into(),
+        );
+
+        let col = widget::column::with_children(children).spacing(6).padding(8);
+        widget::scrollable(col).height(Length::Fixed(540.0)).into()
+    }
 }
 
 impl cosmic::Application for Window {
@@ -261,6 +380,38 @@ impl cosmic::Application for Window {
                 return cosmic::task::message(cosmic::Action::Cosmic(
                     cosmic::app::Action::Surface(a),
                 ));
+            }
+            Message::OpenEditor => self.mode = Mode::Edit,
+            Message::CloseEditor => self.mode = Mode::List,
+            Message::FormLabel(s) => self.form.label = s,
+            Message::FormKeys(s) => self.form.keys = s,
+            Message::FormCommand(s) => self.form.command = s,
+            Message::FormSection(s) => self.form.section = s,
+            Message::AddCustom => {
+                let label = self.form.label.trim().to_string();
+                let keys = self.form.keys.trim().to_string();
+                if !label.is_empty() && !keys.is_empty() {
+                    let command = non_empty(&self.form.command);
+                    let section = non_empty(&self.form.section);
+                    self.custom.push(CustomShortcut {
+                        label,
+                        keys,
+                        command,
+                        section,
+                    });
+                    if let Err(e) = config::save(&self.custom) {
+                        log::warn!("could not save custom.toml: {e}");
+                    }
+                    self.form = Form::default();
+                }
+            }
+            Message::DeleteCustom(i) => {
+                if i < self.custom.len() {
+                    self.custom.remove(i);
+                    if let Err(e) = config::save(&self.custom) {
+                        log::warn!("could not save custom.toml: {e}");
+                    }
+                }
             }
         }
         Task::none()

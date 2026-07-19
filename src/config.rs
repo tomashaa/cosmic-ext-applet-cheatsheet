@@ -11,15 +11,15 @@
 //   command = "my-tool --flag"   # optional; if present the row is clickable
 //   section = "My tools"          # optional grouping (defaults to "Custom")
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CustomShortcut {
     pub label: String,
     pub keys: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
 }
 
@@ -37,10 +37,26 @@ impl CustomShortcut {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct CustomConfig {
     #[serde(default)]
     shortcut: Vec<CustomShortcut>,
+}
+
+/// Write the custom shortcuts back to `custom.toml`, creating the dir if needed.
+pub fn save(shortcuts: &[CustomShortcut]) -> std::io::Result<()> {
+    let Some(path) = config_path() else {
+        return Ok(());
+    };
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let cfg = CustomConfig {
+        shortcut: shortcuts.to_vec(),
+    };
+    let text = toml::to_string_pretty(&cfg)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(path, text)
 }
 
 fn config_path() -> Option<std::path::PathBuf> {
