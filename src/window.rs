@@ -58,37 +58,53 @@ fn row_view(
     label: String,
     keys: String,
     argv: Option<Vec<String>>,
-    dim: bool,
+    _dim: bool,
 ) -> Element<'static, Message> {
-    let content = widget::row::with_children(vec![
-        widget::text(label).width(Length::Fill).into(),
-        widget::text(keys).size(12).into(),
-    ])
-    .spacing(12);
-
     let clickable = argv.is_some();
-    let mut cell = widget::container(content).width(Length::Fill).padding(8);
-    if clickable {
-        // Faint accent tint marks a row as clickable (a "link").
-        cell = cell.class(cosmic::theme::Container::custom(|theme| {
-            let mut c: cosmic::iced::Color = theme.cosmic().accent_color().into();
-            c.a = 0.10;
-            cosmic::widget::container::Style {
-                background: Some(cosmic::iced::Background::Color(c)),
-                ..Default::default()
-            }
-        }));
-    } else if dim {
-        // Subtle zebra stripe on informational rows for readability.
-        cell = cell.class(cosmic::theme::Container::custom(|theme| {
+
+    // Clickable actions get an accent-coloured (blue) label, like the old cheat sheet.
+    let label_widget = if clickable {
+        widget::text(label).class(cosmic::theme::Text::Accent)
+    } else {
+        widget::text(label)
+    };
+
+    // The shortcut sits in a rounded "badge" with its own background.
+    let badge = widget::container(widget::text(keys).size(12))
+        .padding(cosmic::iced::Padding {
+            top: 2.0,
+            right: 8.0,
+            bottom: 2.0,
+            left: 8.0,
+        })
+        .class(cosmic::theme::Container::custom(|theme| {
             let mut c: cosmic::iced::Color = theme.cosmic().primary_container_divider().into();
-            c.a = 0.14;
+            c.a = 0.6;
             cosmic::widget::container::Style {
                 background: Some(cosmic::iced::Background::Color(c)),
+                border: cosmic::iced::Border {
+                    radius: 6.0.into(),
+                    ..Default::default()
+                },
                 ..Default::default()
             }
         }));
-    }
+
+    let content = widget::row::with_children(vec![
+        label_widget.width(Length::Fill).into(),
+        badge.into(),
+    ])
+    .spacing(12)
+    .align_y(cosmic::iced::Alignment::Center);
+
+    let cell = widget::container(content)
+        .width(Length::Fill)
+        .padding(cosmic::iced::Padding {
+            top: 6.0,
+            right: 8.0,
+            bottom: 6.0,
+            left: 8.0,
+        });
 
     match argv {
         Some(cmd) => widget::mouse_area(cell).on_press(Message::Launch(cmd)).into(),
@@ -99,8 +115,8 @@ fn row_view(
 /// A section heading: accent-coloured and set apart from the rows below it.
 fn heading_view(title: &str) -> Element<'static, Message> {
     widget::container(
-        widget::text(title.to_string())
-            .size(14)
+        widget::text(title.to_uppercase())
+            .size(13)
             .class(cosmic::theme::Text::Accent),
     )
     .padding(cosmic::iced::Padding {
@@ -153,7 +169,7 @@ impl Window {
                 if !matches(&q, l, k) {
                     continue;
                 }
-                rows.push(row_view(l.to_string(), k.to_string(), None, j % 2 == 1));
+                rows.push(row_view(l.to_string(), k.to_string(), None, j % 2 == 0));
                 j += 1;
             }
             if rows.is_empty() {
@@ -182,7 +198,7 @@ impl Window {
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
                 let argv = c.argv();
                 let arg = if argv.is_empty() { None } else { Some(argv) };
-                children.push(row_view(c.label.clone(), c.keys.clone(), arg, j % 2 == 1));
+                children.push(row_view(c.label.clone(), c.keys.clone(), arg, j % 2 == 0));
                 j += 1;
             }
         }
