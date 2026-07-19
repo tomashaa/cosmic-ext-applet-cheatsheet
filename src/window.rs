@@ -5,7 +5,6 @@ use cosmic::app::{Core, Task};
 use cosmic::iced::core::window;
 use cosmic::iced::window::Id;
 use cosmic::iced::Length;
-use cosmic::surface::action::destroy_popup;
 use cosmic::widget;
 use cosmic::Element;
 
@@ -35,8 +34,8 @@ struct Form {
 
 pub struct Window {
     core: Core,
-    popup: Option<Id>,
     search: String,
+    search_id: cosmic::widget::Id,
     custom: Vec<CustomShortcut>,
     lang: &'static str,
     mode: Mode,
@@ -49,8 +48,8 @@ impl Default for Window {
     fn default() -> Self {
         Self {
             core: Core::default(),
-            popup: None,
             search: String::new(),
+            search_id: cosmic::widget::Id::unique(),
             custom: config::load(),
             lang: crate::i18n::current_lang(),
             mode: Mode::default(),
@@ -62,7 +61,6 @@ impl Default for Window {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    PopupClosed(Id),
     Surface(cosmic::surface::Action),
     Search(String),
     Launch(Vec<String>),
@@ -195,6 +193,7 @@ impl Window {
             widget::row::with_children(vec![
                 widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
                     .on_input(Message::Search)
+                    .id(self.search_id.clone())
                     .width(Length::Fill)
                     .into(),
                 widget::button::text("⚙")
@@ -387,7 +386,7 @@ impl cosmic::Application for Window {
                 .set_auto_corner_radius(cosmic::core::Auto::Window | cosmic::core::Auto::Popup);
             // Standalone: show the cheat sheet in a layer surface anchored to
             // the top edge (drops down from the top like the old GTK panel).
-            cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(
+            let surface = cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(
                 cosmic::surface::action::app_layer_shell::<Window>(
                     |_app| cosmic::surface::action::LiveSettings::default(),
                     |_app: &mut Window| {
@@ -439,28 +438,24 @@ impl cosmic::Application for Window {
                         Element::from(dismiss).map(cosmic::Action::App)
                     })),
                 ),
-            )))
+            )));
+            // Focus the search field so typing filters immediately.
+            Task::batch([
+                surface,
+                cosmic::widget::text_input::focus(window.search_id.clone()),
+            ])
         } else {
             Task::none()
         };
         (window, task)
     }
 
-    fn on_close_requested(&self, id: window::Id) -> Option<Message> {
-        if self.windowed {
-            None
-        } else {
-            Some(Message::PopupClosed(id))
-        }
+    fn on_close_requested(&self, _id: window::Id) -> Option<Message> {
+        None
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::PopupClosed(id) => {
-                if self.popup.as_ref() == Some(&id) {
-                    self.popup = None;
-                }
-            }
             Message::Search(q) => {
                 self.search = q;
             }
@@ -481,11 +476,6 @@ impl cosmic::Application for Window {
                 spawn(&argv);
                 if self.windowed {
                     std::process::exit(0);
-                }
-                if let Some(id) = self.popup.take() {
-                    return cosmic::task::message(cosmic::Action::Cosmic(
-                        cosmic::app::Action::Surface(destroy_popup(id)),
-                    ));
                 }
             }
             Message::Surface(a) => {
