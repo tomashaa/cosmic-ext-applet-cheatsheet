@@ -29,6 +29,8 @@ struct Form {
     keys: String,
     command: String,
     section: String,
+    /// A note (hugselapp) instead of a shortcut: no command, free-text value.
+    is_note: bool,
 }
 
 pub struct Window {
@@ -67,6 +69,7 @@ pub enum Message {
     FormKeys(String),
     FormCommand(String),
     FormSection(String),
+    FormToggleNote(bool),
     AddCustom,
     DeleteCustom(usize),
 }
@@ -299,21 +302,40 @@ impl Window {
 
         // Add form.
         children.push(heading_view("Add"));
+        // Type toggle: shortcut vs note (hugselapp).
+        children.push(
+            widget::row::with_children(vec![
+                widget::toggler(self.form.is_note)
+                    .on_toggle(Message::FormToggleNote)
+                    .into(),
+                widget::text("Note (hugselapp — no shortcut)").into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
+        );
         children.push(
             widget::text_input::text_input("Name", &self.form.label)
                 .on_input(Message::FormLabel)
                 .into(),
         );
+        let value_ph = if self.form.is_note {
+            "Text"
+        } else {
+            "Shortcut (e.g. Super + C)"
+        };
         children.push(
-            widget::text_input::text_input("Shortcut (e.g. Super + C)", &self.form.keys)
+            widget::text_input::text_input(value_ph, &self.form.keys)
                 .on_input(Message::FormKeys)
                 .into(),
         );
-        children.push(
-            widget::text_input::text_input("Command (optional)", &self.form.command)
-                .on_input(Message::FormCommand)
-                .into(),
-        );
+        if !self.form.is_note {
+            children.push(
+                widget::text_input::text_input("Command (optional)", &self.form.command)
+                    .on_input(Message::FormCommand)
+                    .into(),
+            );
+        }
         children.push(
             widget::text_input::text_input("Section (optional)", &self.form.section)
                 .on_input(Message::FormSection)
@@ -387,11 +409,17 @@ impl cosmic::Application for Window {
             Message::FormKeys(s) => self.form.keys = s,
             Message::FormCommand(s) => self.form.command = s,
             Message::FormSection(s) => self.form.section = s,
+            Message::FormToggleNote(b) => self.form.is_note = b,
             Message::AddCustom => {
                 let label = self.form.label.trim().to_string();
                 let keys = self.form.keys.trim().to_string();
                 if !label.is_empty() && !keys.is_empty() {
-                    let command = non_empty(&self.form.command);
+                    // A note (hugselapp) never has a command.
+                    let command = if self.form.is_note {
+                        None
+                    } else {
+                        non_empty(&self.form.command)
+                    };
                     let section = non_empty(&self.form.section);
                     self.custom.push(CustomShortcut {
                         label,
