@@ -36,6 +36,7 @@ pub struct Window {
     core: Core,
     search: String,
     search_id: cosmic::widget::Id,
+    scroll_id: cosmic::widget::Id,
     custom: Vec<CustomShortcut>,
     lang: &'static str,
     mode: Mode,
@@ -52,6 +53,7 @@ impl Default for Window {
             core: Core::default(),
             search: String::new(),
             search_id: cosmic::widget::Id::unique(),
+            scroll_id: cosmic::widget::Id::unique(),
             custom: config::load(),
             lang: crate::i18n::current_lang(),
             mode: Mode::default(),
@@ -334,8 +336,23 @@ impl Window {
 
         let col = widget::column::with_children(children).spacing(2).padding(8);
         widget::scrollable(col)
+            .id(self.scroll_id.clone())
             .height(Length::Fixed(540.0))
             .into()
+    }
+
+    /// Scroll the list so the keyboard-selected row stays roughly in view.
+    fn scroll_to_selected(&self) -> Task<Message> {
+        let n = self.nav_commands().len();
+        let y = if n > 1 {
+            self.selected as f32 / (n - 1) as f32
+        } else {
+            0.0
+        };
+        cosmic::iced::widget::scrollable::snap_to(
+            self.scroll_id.clone(),
+            cosmic::iced::widget::scrollable::RelativeOffset { x: None, y: Some(y) },
+        )
     }
 
     fn edit_body(&self) -> Element<'_, Message> {
@@ -534,9 +551,11 @@ impl cosmic::Application for Window {
                 if n > 0 {
                     self.selected = (self.selected + 1).min(n - 1);
                 }
+                return self.scroll_to_selected();
             }
             Message::NavUp => {
                 self.selected = self.selected.saturating_sub(1);
+                return self.scroll_to_selected();
             }
             Message::NavActivate => {
                 if let Some(argv) = self.nav_commands().get(self.selected).cloned() {
