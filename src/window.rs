@@ -41,6 +41,8 @@ pub struct Window {
     lang: &'static str,
     mode: Mode,
     form: Form,
+    /// Running as a standalone window (`--window`) rather than a panel applet.
+    windowed: bool,
 }
 
 impl Default for Window {
@@ -53,6 +55,7 @@ impl Default for Window {
             lang: crate::i18n::current_lang(),
             mode: Mode::default(),
             form: Form::default(),
+            windowed: false,
         }
     }
 }
@@ -354,7 +357,7 @@ impl Window {
 
 impl cosmic::Application for Window {
     type Executor = cosmic::SingleThreadExecutor;
-    type Flags = ();
+    type Flags = bool;
     type Message = Message;
     const APP_ID: &'static str = ID;
 
@@ -366,10 +369,11 @@ impl cosmic::Application for Window {
         &mut self.core
     }
 
-    fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Message>) {
+    fn init(core: Core, windowed: Self::Flags) -> (Self, Task<Message>) {
         (
             Window {
                 core,
+                windowed,
                 ..Default::default()
             },
             Task::none(),
@@ -377,7 +381,11 @@ impl cosmic::Application for Window {
     }
 
     fn on_close_requested(&self, id: window::Id) -> Option<Message> {
-        Some(Message::PopupClosed(id))
+        if self.windowed {
+            None
+        } else {
+            Some(Message::PopupClosed(id))
+        }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -392,6 +400,9 @@ impl cosmic::Application for Window {
             }
             Message::Launch(argv) => {
                 spawn(&argv);
+                if self.windowed {
+                    std::process::exit(0);
+                }
                 if let Some(id) = self.popup.take() {
                     return cosmic::task::message(cosmic::Action::Cosmic(
                         cosmic::app::Action::Surface(destroy_popup(id)),
@@ -446,6 +457,10 @@ impl cosmic::Application for Window {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        // Standalone window: show the cheat sheet directly.
+        if self.windowed {
+            return self.body();
+        }
         let have_popup = self.popup;
         let btn = self
             .core
