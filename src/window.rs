@@ -96,6 +96,22 @@ fn row_view(
     }
 }
 
+/// A section heading: accent-coloured and set apart from the rows below it.
+fn heading_view(title: &str) -> Element<'static, Message> {
+    widget::container(
+        widget::text(title.to_string())
+            .size(14)
+            .class(cosmic::theme::Text::Accent),
+    )
+    .padding(cosmic::iced::Padding {
+        top: 10.0,
+        right: 8.0,
+        bottom: 2.0,
+        left: 8.0,
+    })
+    .into()
+}
+
 impl Window {
     /// Build the scrollable cheat-sheet body shown inside the popup.
     fn body(&self) -> Element<'_, Message> {
@@ -125,7 +141,7 @@ impl Window {
             i += 1;
         }
         if !acts.is_empty() {
-            children.push(widget::text::heading("Actions").into());
+            children.push(heading_view("Actions"));
             children.extend(acts);
         }
 
@@ -143,7 +159,7 @@ impl Window {
             if rows.is_empty() {
                 continue;
             }
-            children.push(widget::text::heading(s.title).into());
+            children.push(heading_view(s.title));
             children.extend(rows);
         }
 
@@ -161,7 +177,7 @@ impl Window {
             }
         }
         for sec in sections {
-            children.push(widget::text::heading(sec).into());
+            children.push(heading_view(sec));
             let mut j = 0;
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
                 let argv = c.argv();
