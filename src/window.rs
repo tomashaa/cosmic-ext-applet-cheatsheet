@@ -43,15 +43,27 @@ pub struct Window {
     form: Form,
     /// Index of the keyboard-selected clickable row (into `nav_commands()`).
     selected: usize,
+    /// Remember the last search + scroll across opens.
+    remember: bool,
+    /// Current scroll offset (relative y), tracked for persistence.
+    scroll: f32,
+    /// Scroll offset to restore once the surface opens.
+    restore_scroll: f32,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
 }
 
 impl Default for Window {
     fn default() -> Self {
+        let settings = config::load_settings();
+        let state = if settings.remember {
+            config::load_state()
+        } else {
+            config::State::default()
+        };
         Self {
             core: Core::default(),
-            search: String::new(),
+            search: state.search,
             search_id: cosmic::widget::Id::unique(),
             scroll_id: cosmic::widget::Id::unique(),
             custom: config::load(),
@@ -59,6 +71,9 @@ impl Default for Window {
             mode: Mode::default(),
             form: Form::default(),
             selected: 0,
+            remember: settings.remember,
+            scroll: state.scroll,
+            restore_scroll: state.scroll,
             windowed: false,
         }
     }
@@ -76,6 +91,8 @@ pub enum Message {
     NavUp,
     NavDown,
     NavActivate,
+    Scrolled(f32),
+    ToggleRemember(bool),
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -337,6 +354,7 @@ impl Window {
         let col = widget::column::with_children(children).spacing(2).padding(8);
         widget::scrollable(col)
             .id(self.scroll_id.clone())
+            .on_scroll(|vp| Message::Scrolled(vp.relative_offset().y))
             .height(Length::Fixed(540.0))
             .into()
     }
@@ -355,6 +373,16 @@ impl Window {
         )
     }
 
+    /// Persist the current search + scroll if "remember" is on.
+    fn persist_state(&self) {
+        if self.remember {
+            config::save_state(&config::State {
+                search: self.search.clone(),
+                scroll: self.scroll,
+            });
+        }
+    }
+
     fn edit_body(&self) -> Element<'_, Message> {
         let mut children: Vec<Element<Message>> = Vec::new();
 
@@ -367,6 +395,19 @@ impl Window {
                     .class(cosmic::theme::Text::Accent)
                     .width(Length::Fill)
                     .into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
+        );
+
+        // Setting: remember the last search + scroll across opens.
+        children.push(
+            widget::row::with_children(vec![
+                widget::toggler(self.remember)
+                    .on_toggle(Message::ToggleRemember)
+                    .into(),
+                widget::text("Remember last search & scroll").into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -542,9 +583,21 @@ impl cosmic::Application for Window {
             Message::Search(q) => {
                 self.search = q;
                 self.selected = 0;
+                self.persist_state();
             }
             Message::Focus => {
-                return cosmic::widget::text_input::focus(self.search_id.clone());
+                let focus = cosmic::widget::text_input::focus(self.search_id.clone());
+                if self.remember && self.restore_scroll > 0.0 {
+                    let scroll = cosmic::iced::widget::scrollable::snap_to(
+                        self.scroll_id.clone(),
+                        cosmic::iced::widget::scrollable::RelativeOffset {
+                            x: None,
+                            y: Some(self.restore_scroll),
+                        },
+                    );
+                    return Task::batch([focus, scroll]);
+                }
+                return focus;
             }
             Message::NavDown => {
                 let n = self.nav_commands().len();
@@ -564,6 +617,14 @@ impl cosmic::Application for Window {
                         std::process::exit(0);
                     }
                 }
+            }
+            Message::Scrolled(y) => {
+                self.scroll = y;
+                self.persist_state();
+            }
+            Message::ToggleRemember(b) => {
+                self.remember = b;
+                config::save_settings(&config::Settings { remember: b });
             }
             Message::ToggleWindow => {
                 // Open (or toggle) the standalone top-anchored surface, same as

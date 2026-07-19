@@ -81,3 +81,73 @@ pub fn load() -> Vec<CustomShortcut> {
         }
     }
 }
+
+// ---- Settings (persistent) + last-search state (per session) ----
+
+fn config_dir_file(name: &str) -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(std::path::Path::new(&home).join(".config/cosmic-ext-cheatsheet").join(name))
+}
+
+fn state_path() -> Option<std::path::PathBuf> {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR")?;
+    Some(std::path::Path::new(&dir).join("cosmic-ext-cheatsheet-state.toml"))
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Settings {
+    /// Remember the last search + scroll across opens (default true).
+    #[serde(default = "default_true")]
+    pub remember: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { remember: true }
+    }
+}
+
+pub fn load_settings() -> Settings {
+    config_dir_file("settings.toml")
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| toml::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_settings(s: &Settings) {
+    if let Some(p) = config_dir_file("settings.toml") {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(t) = toml::to_string_pretty(s) {
+            let _ = std::fs::write(p, t);
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct State {
+    #[serde(default)]
+    pub search: String,
+    #[serde(default)]
+    pub scroll: f32,
+}
+
+pub fn load_state() -> State {
+    state_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| toml::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_state(s: &State) {
+    if let Some(p) = state_path() {
+        if let Ok(t) = toml::to_string(s) {
+            let _ = std::fs::write(p, t);
+        }
+    }
+}
