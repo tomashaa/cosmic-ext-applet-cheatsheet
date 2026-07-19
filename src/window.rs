@@ -67,6 +67,8 @@ pub enum Message {
     Search(String),
     Launch(Vec<String>),
     ToggleWindow,
+    Close,
+    Ignore,
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -390,19 +392,24 @@ impl cosmic::Application for Window {
                     |_app| cosmic::surface::action::LiveSettings::default(),
                     |_app: &mut Window| {
                         use cosmic::cctk::sctk::shell::wlr_layer::{Anchor, KeyboardInteractivity};
+                        // Full-screen modal: fills the screen (transparent except the
+                        // panel) so clicks outside dismiss and Esc is captured.
                         cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings {
-                            anchor: Anchor::TOP,
-                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                            size: Some((Some(480), Some(600))),
+                            anchor: Anchor::TOP
+                                .union(Anchor::BOTTOM)
+                                .union(Anchor::LEFT)
+                                .union(Anchor::RIGHT),
+                            keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                            size: None,
                             namespace: "cheatsheet".to_string(),
                             ..Default::default()
                         }
                     },
                     Some(Box::new(|app: &Window| {
-                        // Opaque themed background so the surface isn't see-through.
+                        // The panel: opaque, top corners flush (it meets the header),
+                        // bottom corners rounded.
                         let panel = widget::container(app.body())
-                            .width(Length::Fill)
-                            .height(Length::Fill)
+                            .width(Length::Fixed(480.0))
                             .class(cosmic::theme::Container::custom(|theme| {
                                 let cosmic = theme.cosmic();
                                 cosmic::widget::container::Style {
@@ -410,13 +417,26 @@ impl cosmic::Application for Window {
                                         cosmic.bg_color().into(),
                                     )),
                                     border: cosmic::iced::Border {
-                                        radius: 12.0.into(),
+                                        radius: cosmic::iced::border::Radius {
+                                            top_left: 0.0,
+                                            top_right: 0.0,
+                                            bottom_right: 12.0,
+                                            bottom_left: 12.0,
+                                        },
                                         ..Default::default()
                                     },
                                     ..Default::default()
                                 }
                             }));
-                        Element::from(panel).map(cosmic::Action::App)
+                        // Clicking the panel itself must not dismiss.
+                        let panel = widget::mouse_area(panel).on_press(Message::Ignore);
+                        // Panel at top-centre; the rest of the screen dismisses on click.
+                        let screen = widget::container(panel)
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .align_x(cosmic::iced::alignment::Horizontal::Center);
+                        let dismiss = widget::mouse_area(screen).on_press(Message::Close);
+                        Element::from(dismiss).map(cosmic::Action::App)
                     })),
                 ),
             )))
@@ -451,6 +471,12 @@ impl cosmic::Application for Window {
                     let _ = std::process::Command::new(exe).arg("--window").spawn();
                 }
             }
+            Message::Close => {
+                if self.windowed {
+                    std::process::exit(0);
+                }
+            }
+            Message::Ignore => {}
             Message::Launch(argv) => {
                 spawn(&argv);
                 if self.windowed {
@@ -528,6 +554,25 @@ impl cosmic::Application for Window {
             Message::Surface,
             None,
         ))
+    }
+
+    fn subscription(&self) -> cosmic::iced::Subscription<Message> {
+        if self.windowed {
+            cosmic::iced::event::listen_with(|event, _status, _id| {
+                use cosmic::iced::keyboard::{key::Named, Event as KeyEvent, Key};
+                if let cosmic::iced::Event::Keyboard(KeyEvent::KeyPressed {
+                    key: Key::Named(Named::Escape),
+                    ..
+                }) = event
+                {
+                    Some(Message::Close)
+                } else {
+                    None
+                }
+            })
+        } else {
+            cosmic::iced::Subscription::none()
+        }
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Message> {
