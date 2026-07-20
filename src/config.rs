@@ -103,11 +103,17 @@ pub struct Settings {
     /// Remember the last search + scroll across opens (default true).
     #[serde(default = "default_true")]
     pub remember: bool,
+    /// Learning mode: show per-row checkboxes + reveal learned shortcuts.
+    #[serde(default)]
+    pub learning: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { remember: true }
+        Self {
+            remember: true,
+            learning: false,
+        }
     }
 }
 

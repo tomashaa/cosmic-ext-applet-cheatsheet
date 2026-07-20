@@ -52,8 +52,8 @@ pub struct Window {
     restore_scroll: f32,
     /// Shortcut ids (the keys string) the user has marked as learned.
     learned: std::collections::HashSet<String>,
-    /// Reveal learned shortcuts so they can be un-marked.
-    show_learned: bool,
+    /// Learning mode: show per-row checkboxes + reveal learned shortcuts.
+    learning: bool,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
 }
@@ -81,7 +81,7 @@ impl Default for Window {
             scroll: state.scroll,
             restore_scroll: state.scroll,
             learned: config::load_learned(),
-            show_learned: false,
+            learning: settings.learning,
             windowed: false,
         }
     }
@@ -102,7 +102,7 @@ pub enum Message {
     Scrolled(f32),
     ToggleRemember(bool),
     ToggleLearned(String),
-    ToggleShowLearned,
+    ToggleLearning(bool),
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -143,10 +143,10 @@ fn row_view(
     argv: Option<Vec<String>>,
     selected: bool,
     learned: bool,
+    show_checkbox: bool,
 ) -> Element<'static, Message> {
     let clickable = argv.is_some();
-    let checkbox = widget::button::text(if learned { "☑" } else { "☐" })
-        .on_press(Message::ToggleLearned(keys.clone()));
+    let id = keys.clone();
 
     // Clickable actions get an accent-coloured (blue) label, like the old cheat sheet.
     let label_widget = if clickable {
@@ -176,13 +176,19 @@ fn row_view(
             }
         }));
 
-    let content = widget::row::with_children(vec![
-        checkbox.into(),
-        label_widget.width(Length::Fill).into(),
-        badge.into(),
-    ])
-    .spacing(12)
-    .align_y(cosmic::iced::Alignment::Center);
+    let mut row_children: Vec<Element<Message>> = Vec::new();
+    if show_checkbox {
+        row_children.push(
+            widget::button::text(if learned { "☑" } else { "☐" })
+                .on_press(Message::ToggleLearned(id))
+                .into(),
+        );
+    }
+    row_children.push(label_widget.width(Length::Fill).into());
+    row_children.push(badge.into());
+    let content = widget::row::with_children(row_children)
+        .spacing(12)
+        .align_y(cosmic::iced::Alignment::Center);
 
     let mut cell = widget::container(content)
         .width(Length::Fill)
@@ -250,7 +256,7 @@ impl Window {
                 if s.section != *sec_key || !matches(&q, &s.label, &s.keys) {
                     continue;
                 }
-                if self.learned.contains(&s.keys) && !self.show_learned {
+                if self.learned.contains(&s.keys) && !self.learning {
                     continue;
                 }
                 if let Some(cmd) = &s.command {
@@ -272,7 +278,7 @@ impl Window {
         }
         for sec in sections {
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
-                if self.learned.contains(&c.keys) && !self.show_learned {
+                if self.learned.contains(&c.keys) && !self.learning {
                     continue;
                 }
                 let argv = c.argv();
@@ -296,19 +302,6 @@ impl Window {
                 .width(Length::Fill)
                 .into(),
         ];
-        let n_learned = self.learned.len();
-        if n_learned > 0 {
-            let lbl = if self.show_learned {
-                "Hide learned".to_string()
-            } else {
-                format!("Learned ({n_learned})")
-            };
-            header.push(
-                widget::button::text(lbl)
-                    .on_press(Message::ToggleShowLearned)
-                    .into(),
-            );
-        }
         header.push(widget::button::text("⚙").on_press(Message::OpenEditor).into());
         children.push(
             widget::row::with_children(header)
@@ -327,7 +320,7 @@ impl Window {
                     continue;
                 }
                 let is_learned = self.learned.contains(&s.keys);
-                if is_learned && !self.show_learned {
+                if is_learned && !self.learning {
                     continue;
                 }
                 let clickable = s.command.is_some();
@@ -338,6 +331,7 @@ impl Window {
                     s.command.clone(),
                     sel,
                     is_learned,
+                    self.learning,
                 ));
                 if clickable {
                     ci += 1;
@@ -367,7 +361,7 @@ impl Window {
             let mut rows: Vec<Element<Message>> = Vec::new();
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
                 let is_learned = self.learned.contains(&c.keys);
-                if is_learned && !self.show_learned {
+                if is_learned && !self.learning {
                     continue;
                 }
                 let argv = c.argv();
@@ -379,6 +373,7 @@ impl Window {
                     arg,
                     clickable && self.selected == ci,
                     is_learned,
+                    self.learning,
                 ));
                 if clickable {
                     ci += 1;
@@ -448,6 +443,19 @@ impl Window {
                     .on_toggle(Message::ToggleRemember)
                     .into(),
                 widget::text("Remember last search & scroll").into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
+        );
+
+        // Setting: learning mode (per-row checkboxes to mark shortcuts learned).
+        children.push(
+            widget::row::with_children(vec![
+                widget::toggler(self.learning)
+                    .on_toggle(Message::ToggleLearning)
+                    .into(),
+                widget::text("Learning mode (checkboxes to hide learned)").into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -664,7 +672,10 @@ impl cosmic::Application for Window {
             }
             Message::ToggleRemember(b) => {
                 self.remember = b;
-                config::save_settings(&config::Settings { remember: b });
+                config::save_settings(&config::Settings {
+                    remember: b,
+                    learning: self.learning,
+                });
             }
             Message::ToggleLearned(id) => {
                 if !self.learned.remove(&id) {
@@ -673,8 +684,12 @@ impl cosmic::Application for Window {
                 config::save_learned(&self.learned);
                 self.selected = 0;
             }
-            Message::ToggleShowLearned => {
-                self.show_learned = !self.show_learned;
+            Message::ToggleLearning(b) => {
+                self.learning = b;
+                config::save_settings(&config::Settings {
+                    remember: self.remember,
+                    learning: b,
+                });
                 self.selected = 0;
             }
             Message::ToggleWindow => {
