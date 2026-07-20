@@ -549,13 +549,12 @@ impl cosmic::Application for Window {
             windowed,
             ..Default::default()
         };
+        // Disable auto corner-radius entirely so we never send a
+        // cosmic_corner_radius_*_v1 request — that protocol mismatches across
+        // compositor versions and killed the surface. We round the content
+        // container ourselves instead. Applies to both applet and window modes.
+        window.core.set_auto_corner_radius(Default::default());
         let task = if windowed {
-            // Layer surfaces always try to apply a corner radius, which errors
-            // on cosmic_corner_radius_layer_v1 with this compositor. Drop the
-            // System auto-corner-radius so no corner-radius request is sent.
-            window
-                .core
-                .set_auto_corner_radius(cosmic::core::Auto::Window | cosmic::core::Auto::Popup);
             // Standalone: show the cheat sheet in a layer surface anchored to
             // the top edge (drops down from the top like the old GTK panel).
             let surface = cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(

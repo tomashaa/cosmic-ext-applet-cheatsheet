@@ -12,10 +12,9 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
 [dependencies.libcosmic]
-# Pinned to the libcosmic revision matching the installed cosmic-comp
-# (built 2026-07-09). Master is newer and mismatches this compositor's
-# corner-radius protocol (crash on resume) and theme schema (list_button).
+# Track upstream libcosmic. The exact rev is pinned in Cargo.lock for
+# reproducible builds; corner-radius is disabled in code to stay robust
+# across compositor protocol versions.
 git = "https://github.com/pop-os/libcosmic"
-rev = "c44dbe7"
 default-features = false
 features = ["applet-token"]

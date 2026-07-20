@@ -51,12 +51,13 @@ cosmic-ext-applet-cheatsheet --window
 
 Early but functional. Known rough edges before it's fully upstream-ready:
 
-- The UI strings for the built-in shortcut labels are English (the search UI has
-  i18n scaffolding; full localisation via fluent is a TODO).
-- Corner-radius on the layer surface is disabled to avoid a
-  `cosmic_corner_radius_layer_v1` protocol mismatch on some compositor versions.
-- Built against a pinned `libcosmic` rev matching one COSMIC build — see
-  `Cargo.toml`. It should track upstream `pop-os/libcosmic` for portability.
+- The shortcut labels are English (the search UI has i18n scaffolding; full
+  localisation via fluent is a TODO).
+- Corner-radius is disabled in code so it never sends a `cosmic_corner_radius_*`
+  request, staying robust across compositor protocol versions; the panel content
+  is rounded in-app instead.
+- Tracks upstream `pop-os/libcosmic` (rev pinned in `Cargo.lock`). Builds and
+  runs against current libcosmic master.
 
 ## License
 
