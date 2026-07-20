@@ -50,6 +50,10 @@ pub struct Window {
     scroll: f32,
     /// Scroll offset to restore once the surface opens.
     restore_scroll: f32,
+    /// Shortcut ids (the keys string) the user has marked as learned.
+    learned: std::collections::HashSet<String>,
+    /// Reveal learned shortcuts so they can be un-marked.
+    show_learned: bool,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
 }
@@ -76,6 +80,8 @@ impl Default for Window {
             remember: settings.remember,
             scroll: state.scroll,
             restore_scroll: state.scroll,
+            learned: config::load_learned(),
+            show_learned: false,
             windowed: false,
         }
     }
@@ -95,6 +101,8 @@ pub enum Message {
     NavActivate,
     Scrolled(f32),
     ToggleRemember(bool),
+    ToggleLearned(String),
+    ToggleShowLearned,
     OpenEditor,
     CloseEditor,
     FormLabel(String),
@@ -134,8 +142,11 @@ fn row_view(
     keys: String,
     argv: Option<Vec<String>>,
     selected: bool,
+    learned: bool,
 ) -> Element<'static, Message> {
     let clickable = argv.is_some();
+    let checkbox = widget::button::text(if learned { "☑" } else { "☐" })
+        .on_press(Message::ToggleLearned(keys.clone()));
 
     // Clickable actions get an accent-coloured (blue) label, like the old cheat sheet.
     let label_widget = if clickable {
@@ -166,6 +177,7 @@ fn row_view(
         }));
 
     let content = widget::row::with_children(vec![
+        checkbox.into(),
         label_widget.width(Length::Fill).into(),
         badge.into(),
     ])
@@ -238,6 +250,9 @@ impl Window {
                 if s.section != *sec_key || !matches(&q, &s.label, &s.keys) {
                     continue;
                 }
+                if self.learned.contains(&s.keys) && !self.show_learned {
+                    continue;
+                }
                 if let Some(cmd) = &s.command {
                     out.push(cmd.clone());
                 }
@@ -257,6 +272,9 @@ impl Window {
         }
         for sec in sections {
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
+                if self.learned.contains(&c.keys) && !self.show_learned {
+                    continue;
+                }
                 let argv = c.argv();
                 if !argv.is_empty() {
                     out.push(argv);
@@ -270,21 +288,33 @@ impl Window {
         let q = self.search.to_lowercase();
         let mut children: Vec<Element<Message>> = Vec::new();
 
-        // Search field + settings (gear) button.
+        // Search field + (optional) show-learned toggle + settings (gear).
+        let mut header: Vec<Element<Message>> = vec![
+            widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
+                .on_input(Message::Search)
+                .id(self.search_id.clone())
+                .width(Length::Fill)
+                .into(),
+        ];
+        let n_learned = self.learned.len();
+        if n_learned > 0 {
+            let lbl = if self.show_learned {
+                "Hide learned".to_string()
+            } else {
+                format!("Learned ({n_learned})")
+            };
+            header.push(
+                widget::button::text(lbl)
+                    .on_press(Message::ToggleShowLearned)
+                    .into(),
+            );
+        }
+        header.push(widget::button::text("⚙").on_press(Message::OpenEditor).into());
         children.push(
-            widget::row::with_children(vec![
-                widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
-                    .on_input(Message::Search)
-                    .id(self.search_id.clone())
-                    .width(Length::Fill)
-                    .into(),
-                widget::button::text("⚙")
-                    .on_press(Message::OpenEditor)
-                    .into(),
-            ])
-            .spacing(8)
-            .align_y(cosmic::iced::Alignment::Center)
-            .into(),
+            widget::row::with_children(header)
+                .spacing(8)
+                .align_y(cosmic::iced::Alignment::Center)
+                .into(),
         );
 
         // Actual COSMIC shortcuts, grouped by section. Clickable rows (Spawn
@@ -296,9 +326,19 @@ impl Window {
                 if s.section != *sec_key || !matches(&q, &s.label, &s.keys) {
                     continue;
                 }
+                let is_learned = self.learned.contains(&s.keys);
+                if is_learned && !self.show_learned {
+                    continue;
+                }
                 let clickable = s.command.is_some();
                 let sel = clickable && self.selected == ci;
-                rows.push(row_view(s.label.clone(), s.keys.clone(), s.command.clone(), sel));
+                rows.push(row_view(
+                    s.label.clone(),
+                    s.keys.clone(),
+                    s.command.clone(),
+                    sel,
+                    is_learned,
+                ));
                 if clickable {
                     ci += 1;
                 }
@@ -324,21 +364,31 @@ impl Window {
             }
         }
         for sec in sections {
-            children.push(heading_view(sec));
+            let mut rows: Vec<Element<Message>> = Vec::new();
             for c in custom.iter().filter(|c| c.section_or_default() == sec) {
+                let is_learned = self.learned.contains(&c.keys);
+                if is_learned && !self.show_learned {
+                    continue;
+                }
                 let argv = c.argv();
                 let clickable = !argv.is_empty();
                 let arg = if clickable { Some(argv) } else { None };
-                children.push(row_view(
+                rows.push(row_view(
                     c.label.clone(),
                     c.keys.clone(),
                     arg,
                     clickable && self.selected == ci,
+                    is_learned,
                 ));
                 if clickable {
                     ci += 1;
                 }
             }
+            if rows.is_empty() {
+                continue;
+            }
+            children.push(heading_view(sec));
+            children.extend(rows);
         }
 
         let col = widget::column::with_children(children).spacing(2).padding(8);
@@ -615,6 +665,17 @@ impl cosmic::Application for Window {
             Message::ToggleRemember(b) => {
                 self.remember = b;
                 config::save_settings(&config::Settings { remember: b });
+            }
+            Message::ToggleLearned(id) => {
+                if !self.learned.remove(&id) {
+                    self.learned.insert(id);
+                }
+                config::save_learned(&self.learned);
+                self.selected = 0;
+            }
+            Message::ToggleShowLearned => {
+                self.show_learned = !self.show_learned;
+                self.selected = 0;
             }
             Message::ToggleWindow => {
                 // Open (or toggle) the standalone top-anchored surface, same as

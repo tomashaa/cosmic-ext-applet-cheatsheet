@@ -151,3 +151,32 @@ pub fn save_state(s: &State) {
         }
     }
 }
+
+// ---- "Learned" shortcuts (hidden until revealed) ----
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct Learned {
+    #[serde(default)]
+    learned: Vec<String>,
+}
+
+pub fn load_learned() -> std::collections::HashSet<String> {
+    config_dir_file("learned.toml")
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| toml::from_str::<Learned>(&t).ok())
+        .map(|l| l.learned.into_iter().collect())
+        .unwrap_or_default()
+}
+
+pub fn save_learned(set: &std::collections::HashSet<String>) {
+    if let Some(p) = config_dir_file("learned.toml") {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let mut v: Vec<String> = set.iter().cloned().collect();
+        v.sort();
+        if let Ok(t) = toml::to_string_pretty(&Learned { learned: v }) {
+            let _ = std::fs::write(p, t);
+        }
+    }
+}
