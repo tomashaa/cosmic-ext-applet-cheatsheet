@@ -1,5 +1,5 @@
 // @generated from clip-suite cheatsheet_i18n.py — do not edit by hand.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 Tomas Haaland
 
 //! UI translations (9 languages) + system-locale detection.

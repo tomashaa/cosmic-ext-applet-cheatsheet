@@ -2,6 +2,7 @@
 name = "cosmic-ext-applet-cheatsheet"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-only"
 description = "A COSMIC panel applet: a searchable keyboard-shortcut cheat sheet with user-defined custom shortcuts"
 
 [dependencies]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 Tomas Haaland
 //
 // Reads the user's ACTUAL COSMIC keyboard shortcuts by parsing the RON config:

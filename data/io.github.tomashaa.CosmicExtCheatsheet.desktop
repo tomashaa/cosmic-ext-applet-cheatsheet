@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Cheat Sheet
+Comment=Searchable keyboard-shortcut cheat sheet
+Type=Application
+Exec=cosmic-ext-applet-cheatsheet
+Terminal=false
+Categories=COSMIC;
+Keywords=COSMIC;Applet;Shortcuts;Cheatsheet;Keyboard;
+Icon=input-keyboard-symbolic
+StartupNotify=true
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto

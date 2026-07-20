@@ -1,44 +1,65 @@
 # cosmic-ext-applet-cheatsheet
 
-A COSMIC panel applet: a searchable **keyboard-shortcut cheat sheet** with
-user-defined custom shortcuts. Native [libcosmic](https://github.com/pop-os/libcosmic)
-port of the GTK `cosmic-cheatsheet` from [clip-suite](https://github.com/tomashaa/clip-suite).
+A COSMIC panel applet + Super-key overlay that shows your **actual keyboard
+shortcuts** — read live from COSMIC's own config — as a searchable, learnable
+cheat sheet.
 
-Click the panel icon to open a searchable list of COSMIC shortcuts and quick
-actions. Clickable actions (Terminal, Files, Screenshot …) launch on click;
-the rest are a reference you can filter as you type.
+Unlike a static list, it reads `com.system76.CosmicSettings.Shortcuts` (system
+defaults + your custom bindings), so it always reflects *your* real keybindings,
+per machine. Your app-launch (`Spawn`) bindings stay clickable, and you can add
+your own extra shortcuts and notes on top.
 
-> Status: early scaffold. The panel button, popup, search, built-in shortcut
-> data and the custom-shortcut config loader are in place; polish and theming
-> are in progress.
+## Features
 
-## Custom shortcuts
-
-Add your own entries in `~/.config/cosmic-ext-cheatsheet/custom.toml`:
-
-```toml
-[[shortcut]]
-label = "My screenshot tool"
-keys = "Super + Shift + M"
-command = "my-tool --flag"   # optional — if present, the row is clickable
-section = "My tools"          # optional grouping (defaults to "Custom")
-
-[[shortcut]]
-label = "Note: build server"
-keys = "10.0.0.5"             # informational only (no command)
-```
-
-They appear under their section in the cheat sheet and update on next open.
+- **Reads your real COSMIC shortcuts** — defaults + custom, merged, grouped
+  (Applications, System, Windows, Focus & move, Workspaces, Monitors, Zoom).
+- **Top-anchored overlay** that drops from the top; opens from the panel icon or
+  a keybind (e.g. `Super + C`). Esc or a click outside closes it; a second press
+  toggles it shut.
+- **Search** with autofocus, **arrow-key navigation** + Enter to launch the
+  selected app binding.
+- **Learning mode** — tick shortcuts you've memorised to hide them, so the list
+  shrinks to what you're still learning (persisted).
+- **Your own shortcuts & notes** — add/edit/delete from the ⚙ editor, stored in
+  `~/.config/cosmic-ext-cheatsheet/custom.toml`.
+- **Remembers** your last search + scroll across opens (toggle in settings).
 
 ## Build & install
 
+Requires the Rust toolchain and a COSMIC session.
+
 ```sh
-cargo build --release
-# install the binary + a .desktop applet entry (see justfile, TODO)
+just build      # cargo build --release
+just install    # install the binary + .desktop to ~/.local
 ```
+
+Then add the applet to your panel (COSMIC Settings → Desktop → Panel → Configure
+applets), and optionally bind a key (COSMIC Settings → Keyboard → Shortcuts) to:
+
+```
+cosmic-ext-applet-cheatsheet --window
+```
+
+## Config files
+
+- `~/.config/cosmic-ext-cheatsheet/custom.toml` — your extra shortcuts/notes
+  (see `custom.toml.example`).
+- `~/.config/cosmic-ext-cheatsheet/settings.toml` — remember / learning toggles.
+- `~/.config/cosmic-ext-cheatsheet/learned.toml` — shortcuts marked as learned.
+
+## Status & notes
+
+Early but functional. Known rough edges before it's fully upstream-ready:
+
+- The UI strings for the built-in shortcut labels are English (the search UI has
+  i18n scaffolding; full localisation via fluent is a TODO).
+- Corner-radius on the layer surface is disabled to avoid a
+  `cosmic_corner_radius_layer_v1` protocol mismatch on some compositor versions.
+- Built against a pinned `libcosmic` rev matching one COSMIC build — see
+  `Cargo.toml`. It should track upstream `pop-os/libcosmic` for portability.
 
 ## License
 
-MIT for this crate's own code (see SPDX headers). **Pending:** the effective
-license of the built binary depends on the COSMIC dependency graph
-(`cosmic-panel-config` and friends) — to be confirmed before publishing.
+GPL-3.0-only — see [`LICENSE`](LICENSE). The binary links COSMIC crates
+(`cosmic-protocols`, `cosmic-client-toolkit`) that are GPL-3.0-only, so the
+whole work is distributed under the GPL.
