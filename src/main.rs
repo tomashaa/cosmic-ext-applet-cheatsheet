@@ -10,6 +10,8 @@ mod ipc;
 mod shortcuts;
 mod window;
 
+use std::time::Duration;
+
 use window::Window;
 
 fn pid_path() -> std::path::PathBuf {
@@ -18,18 +20,26 @@ fn pid_path() -> std::path::PathBuf {
 }
 
 /// Open or close the cheat sheet for Super+C / `--window`.
-///
-/// If anything is already visible, this press only closes. Otherwise it asks
-/// the panel applet to open, or spawns a short-lived `--window` process.
 fn run_window() -> cosmic::iced::Result {
+    // CLOSE — anything already visible.
     if ipc::anything_open() {
         ipc::close_everything();
         let _ = std::fs::remove_file(pid_path());
         return Ok(());
     }
 
+    // OPEN — prefer resident panel applet; fall back to standalone if it
+    // doesn't claim the sheet quickly (avoids "Super+C does nothing").
+    ipc::clear_close_request();
     if ipc::request_applet_open() {
-        return Ok(());
+        if ipc::wait_until_open(Duration::from_millis(750)) {
+            return Ok(());
+        }
+        log::warn!("panel applet did not open cheatsheet; falling back to --window");
+        let _ = std::fs::remove_file(
+            std::path::Path::new(&std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
+                .join("cosmic-ext-cheatsheet.request.open"),
+        );
     }
 
     let pidf = pid_path();

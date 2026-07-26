@@ -2,13 +2,10 @@
 // Copyright (c) 2026 Tomas Haaland
 //! IPC + single-open guard for Super+C / panel toggle.
 //!
-//! COSMIC may run several applet instances (one per panel/output). A single
-//! "toggle" file races: an instance *without* the sheet opens a second one.
-//!
-//! Protocol:
-//! - `*.open` marker — PID of the process that currently owns the sheet
-//! - `*.request.open` — one-shot; first applet to claim opens (with marker)
-//! - `*.request.close` — sticky; every applet with an open sheet closes
+//! COSMIC may run several applet instances (one per panel/output). Protocol:
+//! - `*.open` marker — PID that currently owns the sheet
+//! - `*.request.open` — one-shot; first applet to claim opens
+//! - `*.request.close` — sticky while closing; every instance with a sheet closes
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -41,29 +38,47 @@ fn pid_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
 }
 
-fn cmdline(pid: u32) -> Option<String> {
+fn cmdline_args(pid: u32) -> Option<Vec<String>> {
     let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
-    Some(String::from_utf8_lossy(&raw).replace('\0', " "))
+    let args: Vec<String> = raw
+        .split(|b| *b == 0)
+        .filter(|a| !a.is_empty())
+        .map(|a| String::from_utf8_lossy(a).into_owned())
+        .collect();
+    if args.is_empty() {
+        None
+    } else {
+        Some(args)
+    }
+}
+
+/// True only when `/proc/pid/exe` is our binary — never match shells whose
+/// cmdline merely *mentions* `cosmic-ext-applet-cheatsheet --window` (Cursor
+/// agent wrappers previously made Super+C stuck in permanent close mode).
+fn exe_is_ours(pid: u32) -> bool {
+    let Ok(link) = std::fs::read_link(format!("/proc/{pid}/exe")) else {
+        return false;
+    };
+    let name = link
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    // Deleted binaries show as "name (deleted)".
+    name.starts_with("cosmic-ext-applet-cheatsheet")
 }
 
 fn is_our_binary(pid: u32) -> bool {
-    cmdline(pid)
-        .map(|c| c.contains("cosmic-ext-applet-cheatsheet"))
-        .unwrap_or(false)
+    exe_is_ours(pid)
 }
 
 fn is_our_applet(pid: u32) -> bool {
-    let Some(cmd) = cmdline(pid) else {
-        return false;
-    };
-    cmd.contains("cosmic-ext-applet-cheatsheet") && !cmd.contains("--window")
+    exe_is_ours(pid)
+        && cmdline_args(pid).is_some_and(|args| args.iter().all(|a| a != "--window"))
 }
 
 fn is_our_window(pid: u32) -> bool {
-    let Some(cmd) = cmdline(pid) else {
-        return false;
-    };
-    cmd.contains("cosmic-ext-applet-cheatsheet") && cmd.contains("--window")
+    exe_is_ours(pid)
+        && cmdline_args(pid).is_some_and(|args| args.iter().any(|a| a == "--window"))
 }
 
 /// Record that a panel applet exists (best-effort discovery for Super+C).
@@ -102,6 +117,8 @@ pub fn request_applet_open() -> bool {
     if !applet_is_registered() {
         return false;
     }
+    // Never let a leftover close flag kill the sheet we are about to open.
+    clear_close_request();
     match std::fs::write(open_request_path(), b"1\n") {
         Ok(()) => true,
         Err(e) => {
@@ -113,11 +130,8 @@ pub fn request_applet_open() -> bool {
 
 /// Ask *all* panel applets to close — sticky until cleared.
 pub fn request_applet_close() -> bool {
-    if !applet_is_registered() {
-        // Still write the flag: applets may exist even if pid file is stale.
-        let _ = std::fs::write(close_request_path(), b"1\n");
-        return close_request_path().exists();
-    }
+    // Drop any pending open so we don't reopen while closing.
+    let _ = std::fs::remove_file(open_request_path());
     match std::fs::write(close_request_path(), b"1\n") {
         Ok(()) => true,
         Err(e) => {
@@ -146,12 +160,8 @@ pub fn take_open_request() -> bool {
     }
 }
 
-/// True when a live process owns the global sheet marker.
 pub fn open_marker_alive() -> bool {
-    match open_owner() {
-        Some(pid) => pid_alive(pid) && is_our_binary(pid),
-        None => false,
-    }
+    open_owner().is_some()
 }
 
 pub fn open_owner() -> Option<u32> {
@@ -181,7 +191,6 @@ pub fn claim_open_marker() -> bool {
     }
 }
 
-/// Drop the marker if we own it (or it's stale).
 pub fn release_open_marker() {
     let path = open_marker_path();
     match std::fs::read_to_string(&path) {
@@ -196,7 +205,6 @@ pub fn release_open_marker() {
     }
 }
 
-/// Kill any live standalone `--window` instances. Returns true if any were signaled.
 pub fn kill_windowed_instances() -> bool {
     let mut killed = false;
     let Ok(dir) = std::fs::read_dir("/proc") else {
@@ -220,7 +228,6 @@ pub fn kill_windowed_instances() -> bool {
     killed
 }
 
-/// True if any standalone `--window` sheet process is running.
 pub fn any_windowed_instances() -> bool {
     let Ok(dir) = std::fs::read_dir("/proc") else {
         return false;
@@ -236,17 +243,19 @@ pub fn any_windowed_instances() -> bool {
     })
 }
 
-/// Super+C "is anything showing?" — marker or windowed process.
 pub fn anything_open() -> bool {
     open_marker_alive() || any_windowed_instances()
 }
 
-/// Close every visible sheet: kill `--window` processes and signal applets.
-/// Blocks briefly so applet polls can observe the sticky close flag.
-pub fn close_everything() {
+/// Non-blocking close signal for use on the UI thread (panel button).
+pub fn signal_close() {
     let _ = kill_windowed_instances();
     let _ = request_applet_close();
-    // Applets poll every ~150ms; wait long enough for begin_close + marker release.
+}
+
+/// Blocking close for the Super+C helper process (not the applet UI thread).
+pub fn close_everything() {
+    signal_close();
     for _ in 0..20 {
         if !open_marker_alive() && !any_windowed_instances() {
             break;
@@ -254,7 +263,25 @@ pub fn close_everything() {
         std::thread::sleep(Duration::from_millis(50));
     }
     clear_close_request();
-    if !open_marker_alive() {
+    let _ = std::fs::remove_file(open_request_path());
+    // If an applet ignored close or the marker is stale, don't stay stuck in
+    // permanent "close-only" mode — drop the marker so the next press can open.
+    if open_marker_alive() {
+        log::warn!("cheatsheet open marker still present after close; forcing clear");
         let _ = std::fs::remove_file(open_marker_path());
     }
+}
+
+/// Wait until an applet claims the open marker (or timeout).
+pub fn wait_until_open(timeout: Duration) -> bool {
+    let steps = (timeout.as_millis() / 50).max(1) as usize;
+    for _ in 0..steps {
+        if open_marker_alive() {
+            return true;
+        }
+        // A stale close flag must not cancel a fresh open.
+        clear_close_request();
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    false
 }

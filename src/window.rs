@@ -130,7 +130,6 @@ pub enum Message {
     /// Poll file IPC from `--window` / Super+C while the panel applet runs.
     IpcPoll,
     Close,
-    Ignore,
     Focus,
     NavUp,
     NavDown,
@@ -384,22 +383,24 @@ impl Window {
                 self.begin_close()
             }
         } else if crate::ipc::anything_open() {
-            // Another instance (other output / orphan --window) is showing it.
-            crate::ipc::close_everything();
+            // Another instance owns it — signal close without blocking this UI thread.
+            crate::ipc::signal_close();
             Task::none()
         } else {
             self.open_sheet()
         }
     }
 
-    /// Full-screen layer: panel docks on the right; click outside / Esc closes.
-    /// Exclusive keyboard so Esc always reaches us (search field won't swallow it).
+    /// Right-edge sheet only — never a fullscreen Exclusive grab.
+    /// A stuck fullscreen+Exclusive layer previously stole mouse/keyboard
+    /// system-wide until the dock was reset.
     fn open_sheet(&mut self) -> Task<Message> {
         // Single-open guard across all applet/--window processes.
         if !crate::ipc::claim_open_marker() {
             log::warn!("cheatsheet already open in another process; not opening a second sheet");
             return Task::none();
         }
+        crate::ipc::clear_close_request();
         self.sheet_open = true;
         self.slide_x = SLIDE_OFF;
         self.slide_target = 0.0;
@@ -410,12 +411,14 @@ impl Window {
                 |_app: &mut Window| {
                     use cosmic::cctk::sctk::shell::wlr_layer::{Anchor, KeyboardInteractivity};
                     cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings {
+                        // Only the right strip — rest of the desktop stays usable.
                         anchor: Anchor::TOP
                             .union(Anchor::BOTTOM)
-                            .union(Anchor::LEFT)
                             .union(Anchor::RIGHT),
-                        keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                        size: None,
+                        // OnDemand: Esc still works while the sheet (search) is
+                        // focused; never globally lock the session keyboard.
+                        keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                        size: Some((Some(PANEL_WIDTH as u32), None)),
                         exclusive_zone: 0,
                         namespace: "cheatsheet".to_string(),
                         ..Default::default()
@@ -443,8 +446,8 @@ impl Window {
                                 ..Default::default()
                             }
                         }));
-                    let panel = widget::mouse_area(panel).on_press(Message::Ignore);
 
+                    // Slide in from the right within the strip.
                     let dock = widget::container(
                         widget::row::with_children(vec![
                             widget::Space::new()
@@ -458,21 +461,7 @@ impl Window {
                     .height(Length::Fill)
                     .clip(true);
 
-                    // Dim/empty left side: click closes (same as GTK Super+P).
-                    let strip = widget::row::with_children(vec![
-                        widget::mouse_area(
-                            widget::container(widget::Space::new())
-                                .width(Length::Fill)
-                                .height(Length::Fill),
-                        )
-                        .on_press(Message::Close)
-                        .into(),
-                        dock.into(),
-                    ])
-                    .width(Length::Fill)
-                    .height(Length::Fill);
-
-                    Element::from(strip).map(cosmic::Action::App)
+                    Element::from(dock).map(cosmic::Action::App)
                 })),
             ),
         )));
@@ -1018,8 +1007,10 @@ impl cosmic::Application for Window {
                 {
                     return self.begin_close();
                 }
-                // One-shot open: claim_open_marker prevents a second sheet.
+                // One-shot open: clear leftover close flags first so we don't
+                // open and immediately close on the next poll.
                 if crate::ipc::take_open_request() && !self.sheet_is_open() {
+                    crate::ipc::clear_close_request();
                     return self.open_sheet();
                 }
             }
@@ -1031,7 +1022,6 @@ impl cosmic::Application for Window {
                     return self.begin_close();
                 }
             }
-            Message::Ignore => {}
             Message::HoverRow(id) => {
                 self.hovered = id;
             }
@@ -1093,7 +1083,9 @@ impl cosmic::Application for Window {
         if self.windowed {
             return self.body();
         }
-        // Clicking the panel icon opens the same top-anchored surface as Super+C.
+        // Clicking the panel icon opens the same sheet as Super+C.
+        // Tip text comes from Fluent (applet language), not desktop Name[lang]
+        // — localized desktop Names followed the system locale (nn_NO) instead.
         let btn = self
             .core
             .applet
@@ -1103,7 +1095,7 @@ impl cosmic::Application for Window {
         Element::from(self.core.applet.applet_tooltip::<Message>(
             btn,
             i18n::tr("ui.tooltip"),
-            false,
+            self.sheet_is_open(),
             Message::Surface,
             None,
         ))
