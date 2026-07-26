@@ -50,9 +50,22 @@ fn main() -> cosmic::iced::Result {
 
     // Debug: print the parsed actual shortcuts and exit.
     if std::env::args().any(|a| a == "--dump-shortcuts") {
-        for s in shortcuts::load() {
+        let lang = i18n::current_lang();
+        let compact = !std::env::args().any(|a| a == "--all");
+        let full = shortcuts::load(lang);
+        let list = shortcuts::for_display(&full, lang, compact);
+        println!(
+            "# {} rows ({})",
+            list.len(),
+            if compact { "compact" } else { "all" }
+        );
+        for s in list {
+            let icon = s.icon.unwrap_or("-");
             let cmd = s.command.as_ref().map(|c| c.join(" ")).unwrap_or_default();
-            println!("[{}] {:28} {:32} {}", s.section, s.keys, s.label, cmd);
+            println!(
+                "[{}] {:40} {:28} {:32} {}",
+                s.section, icon, s.keys, s.label, cmd
+            );
         }
         return Ok(());
     }

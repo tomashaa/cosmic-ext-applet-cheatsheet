@@ -27,7 +27,7 @@ impl CustomShortcut {
     /// The command split into argv, or empty if the row is informational.
     pub fn argv(&self) -> Vec<String> {
         match &self.command {
-            Some(c) => c.split_whitespace().map(str::to_string).collect(),
+            Some(c) => crate::shortcuts::split_command(c),
             None => Vec::new(),
         }
     }
@@ -106,6 +106,9 @@ pub struct Settings {
     /// Learning mode: show per-row checkboxes + reveal learned shortcuts.
     #[serde(default)]
     pub learning: bool,
+    /// Compact overview (merge directions / workspaces, hide media keys). Default on.
+    #[serde(default = "default_true")]
+    pub compact: bool,
 }
 
 impl Default for Settings {
@@ -113,6 +116,7 @@ impl Default for Settings {
         Self {
             remember: true,
             learning: false,
+            compact: true,
         }
     }
 }

@@ -13,11 +13,16 @@ your own extra shortcuts and notes on top.
 
 - **Reads your real COSMIC shortcuts** — defaults + custom, merged, grouped
   (Applications, System, Windows, Focus & move, Workspaces, Monitors, Zoom).
-- **Top-anchored overlay** that drops from the top; opens from the panel icon or
-  a keybind (e.g. `Super + C`). Esc or a click outside closes it; a second press
-  toggles it shut.
+- **Right-edge slide-in panel** (same interaction model as the GTK Super+P
+  sheet); opens from the panel icon or a keybind (e.g. `Super + C`). Esc or a
+  click outside closes it; a second press toggles it shut.
 - **Search** with autofocus, **arrow-key navigation** + Enter to launch the
   selected app binding.
+- **Compact overview (default)** — merges arrow/workspace duplicates and hides
+  media keys (Super+P-style scanability); toggle **Show all** for the full dump.
+- **Cosmic symbolic icons** on rows for faster scanning.
+- **Non-modal right-edge panel** — other windows stay usable while open; Esc / Super+C closes.
+- **Language picker** in ⚙ (shared with GTK sheet via `~/.config/cosmic-clip/ui-lang`).
 - **Learning mode** — tick shortcuts you've memorised to hide them, so the list
   shrinks to what you're still learning (persisted).
 - **Your own shortcuts & notes** — add/edit/delete from the ⚙ editor, stored in
@@ -51,13 +56,16 @@ cosmic-ext-applet-cheatsheet --window
 
 Early but functional. Known rough edges before it's fully upstream-ready:
 
-- The shortcut labels are English (the search UI has i18n scaffolding; full
-  localisation via fluent is a TODO).
+- Shortcut labels and section titles follow the system locale (9 languages);
+  fluent-based localisation is still a TODO for broader coverage.
+- Reloads live when COSMIC shortcut config changes (`cosmic-settings-config`).
 - Corner-radius is disabled in code so it never sends a `cosmic_corner_radius_*`
   request, staying robust across compositor protocol versions; the panel content
   is rounded in-app instead.
 - Tracks upstream `pop-os/libcosmic` (rev pinned in `Cargo.lock`). Builds and
   runs against current libcosmic master.
+- Windowed toggle still spawns a short-lived process (PID-file toggle); a
+  resident daemon like the GTK sheet would make open/close snappier.
 
 ## License
 
