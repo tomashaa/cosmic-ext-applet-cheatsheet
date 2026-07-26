@@ -17,40 +17,22 @@ fn pid_path() -> std::path::PathBuf {
     std::path::Path::new(&dir).join("cosmic-ext-cheatsheet.pid")
 }
 
-/// The PID in the file, but only if that process is still alive.
-fn read_live_pid(p: &std::path::Path) -> Option<u32> {
-    let pid: u32 = std::fs::read_to_string(p).ok()?.trim().parse().ok()?;
-    std::path::Path::new(&format!("/proc/{pid}"))
-        .exists()
-        .then_some(pid)
-}
-
-/// Open the cheat sheet as a standalone window; a second invocation while one
-/// is already open closes it instead (toggle), so a keybind toggles it.
+/// Open or close the cheat sheet for Super+C / `--window`.
 ///
-/// Prefer toggling a live panel applet via IPC when one is registered.
+/// If anything is already visible, this press only closes. Otherwise it asks
+/// the panel applet to open, or spawns a short-lived `--window` process.
 fn run_window() -> cosmic::iced::Result {
-    // 1) Panel applet running → ask it to open/close in-process.
-    if ipc::request_applet_toggle() {
-        return Ok(());
-    }
-
-    // 2) Any orphaned `--window` sheets → kill them (acts as "close").
-    if ipc::kill_windowed_instances() {
+    if ipc::anything_open() {
+        ipc::close_everything();
         let _ = std::fs::remove_file(pid_path());
         return Ok(());
     }
 
-    // 3) PID-file toggle (legacy / single-instance).
-    let pidf = pid_path();
-    if let Some(pid) = read_live_pid(&pidf) {
-        let _ = std::process::Command::new("kill")
-            .arg(pid.to_string())
-            .status();
-        let _ = std::fs::remove_file(&pidf);
+    if ipc::request_applet_open() {
         return Ok(());
     }
 
+    let pidf = pid_path();
     let _ = std::fs::write(&pidf, std::process::id().to_string());
     let settings = cosmic::app::Settings::default().no_main_window(true);
     let result = cosmic::app::run::<Window>(settings, true);

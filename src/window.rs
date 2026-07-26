@@ -363,6 +363,7 @@ impl Window {
         self.slide_closing = false;
         self.slide_x = SLIDE_OFF;
         self.slide_target = SLIDE_OFF;
+        crate::ipc::release_open_marker();
         if self.windowed {
             tasks.push(cosmic::iced::exit::<cosmic::Action<Message>>());
         }
@@ -373,7 +374,8 @@ impl Window {
         self.sheet_open || self.surface_id.is_some()
     }
 
-    /// Open or close the right-edge sheet in this process.
+    /// Global open/close (panel button). Close anything visible system-wide;
+    /// only open here when nothing else owns the sheet.
     fn toggle_sheet(&mut self) -> Task<Message> {
         if self.sheet_is_open() {
             if self.slide_closing {
@@ -381,6 +383,10 @@ impl Window {
             } else {
                 self.begin_close()
             }
+        } else if crate::ipc::anything_open() {
+            // Another instance (other output / orphan --window) is showing it.
+            crate::ipc::close_everything();
+            Task::none()
         } else {
             self.open_sheet()
         }
@@ -389,6 +395,11 @@ impl Window {
     /// Full-screen layer: panel docks on the right; click outside / Esc closes.
     /// Exclusive keyboard so Esc always reaches us (search field won't swallow it).
     fn open_sheet(&mut self) -> Task<Message> {
+        // Single-open guard across all applet/--window processes.
+        if !crate::ipc::claim_open_marker() {
+            log::warn!("cheatsheet already open in another process; not opening a second sheet");
+            return Task::none();
+        }
         self.sheet_open = true;
         self.slide_x = SLIDE_OFF;
         self.slide_target = 0.0;
@@ -1000,8 +1011,16 @@ impl cosmic::Application for Window {
                 }
             }
             Message::IpcPoll => {
-                if crate::ipc::take_toggle_request() {
-                    return self.toggle_sheet();
+                // Sticky close: every instance with a sheet must see this.
+                if crate::ipc::close_requested()
+                    && self.sheet_is_open()
+                    && !self.slide_closing
+                {
+                    return self.begin_close();
+                }
+                // One-shot open: claim_open_marker prevents a second sheet.
+                if crate::ipc::take_open_request() && !self.sheet_is_open() {
+                    return self.open_sheet();
                 }
             }
             Message::ToggleWindow => {
