@@ -68,8 +68,10 @@ pub struct Window {
     compact: bool,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
-    /// Layer-surface id (windowed mode) for a clean close.
+    /// Layer-surface id for a clean close.
     surface_id: Option<Id>,
+    /// True from [`Self::open_sheet`] until [`Self::finish_close`] (even before SurfaceReady).
+    sheet_open: bool,
     /// Horizontal offset from the right edge (PANEL_WIDTH = hidden, 0 = open).
     slide_x: f32,
     /// Animation target for `slide_x`.
@@ -81,6 +83,7 @@ pub struct Window {
 impl Default for Window {
     fn default() -> Self {
         let settings = config::load_settings();
+        crate::i18n::init(settings.lang.as_deref());
         let state = if settings.remember {
             config::load_state()
         } else {
@@ -92,7 +95,7 @@ impl Default for Window {
             search: state.search,
             search_id: cosmic::widget::Id::unique(),
             scroll_id: cosmic::widget::Id::unique(),
-            shortcuts: crate::shortcuts::load(lang),
+            shortcuts: crate::shortcuts::load(),
             custom: config::load(),
             lang,
             mode: Mode::default(),
@@ -107,6 +110,7 @@ impl Default for Window {
             compact: settings.compact,
             windowed: false,
             surface_id: None,
+            sheet_open: false,
             slide_x: SLIDE_OFF,
             slide_target: SLIDE_OFF,
             slide_closing: false,
@@ -123,6 +127,8 @@ pub enum Message {
     /// Mouse entered/left a clickable row (`None` = left).
     HoverRow(Option<String>),
     ToggleWindow,
+    /// Poll file IPC from `--window` / Super+C while the panel applet runs.
+    IpcPoll,
     Close,
     Ignore,
     Focus,
@@ -156,20 +162,6 @@ fn spawn(argv: &[String]) {
             log::warn!("failed to launch {cmd}: {e}");
         }
     }
-}
-
-/// Resolve the installed cheatsheet binary. Prefer `~/.local/bin/...` over
-/// `current_exe()` — the panel applet often keeps running after we overwrite
-/// the file on disk (`/proc/self/exe` then points at a deleted inode), so
-/// spawning via `current_exe()` silently fails.
-fn window_exe() -> std::path::PathBuf {
-    if let Some(home) = std::env::var_os("HOME") {
-        let p = std::path::Path::new(&home).join(".local/bin/cosmic-ext-applet-cheatsheet");
-        if p.is_file() {
-            return p;
-        }
-    }
-    std::path::PathBuf::from("cosmic-ext-applet-cheatsheet")
 }
 
 fn matches(q: &str, a: &str, b: &str) -> bool {
@@ -340,23 +332,143 @@ impl Window {
         (self.slide_x - self.slide_target).abs() > 0.5
     }
 
-    /// Start slide-out; process exits when the animation finishes.
+    /// Start slide-out; surface is destroyed (and standalone process exits) after.
     fn begin_close(&mut self) -> Task<Message> {
+        if !self.sheet_open && self.surface_id.is_none() {
+            // Nothing to close — but standalone must still be able to exit.
+            if self.windowed {
+                return cosmic::iced::exit::<cosmic::Action<Message>>();
+            }
+            return Task::none();
+        }
+        self.sheet_open = true; // keep true until finish_close
         self.slide_closing = true;
         self.slide_target = SLIDE_OFF;
+        // If we never got SurfaceReady, skip the animation and tear down now.
+        if self.surface_id.is_none() {
+            return self.finish_close();
+        }
         Task::none()
     }
 
-    /// Destroy the layer surface (if known) and exit the process cleanly.
-    fn finish_close(&self) -> Task<Message> {
+    /// Destroy the layer surface. Standalone `--window` exits; the panel applet stays.
+    fn finish_close(&mut self) -> Task<Message> {
         let mut tasks = Vec::new();
-        if let Some(id) = self.surface_id {
+        if let Some(id) = self.surface_id.take() {
             tasks.push(cosmic::task::message(cosmic::Action::Cosmic(
                 cosmic::app::Action::Surface(cosmic::surface::action::destroy_layer_shell(id)),
             )));
         }
-        tasks.push(cosmic::iced::exit::<cosmic::Action<Message>>());
+        self.sheet_open = false;
+        self.slide_closing = false;
+        self.slide_x = SLIDE_OFF;
+        self.slide_target = SLIDE_OFF;
+        if self.windowed {
+            tasks.push(cosmic::iced::exit::<cosmic::Action<Message>>());
+        }
         Task::batch(tasks)
+    }
+
+    fn sheet_is_open(&self) -> bool {
+        self.sheet_open || self.surface_id.is_some()
+    }
+
+    /// Open or close the right-edge sheet in this process.
+    fn toggle_sheet(&mut self) -> Task<Message> {
+        if self.sheet_is_open() {
+            if self.slide_closing {
+                Task::none()
+            } else {
+                self.begin_close()
+            }
+        } else {
+            self.open_sheet()
+        }
+    }
+
+    /// Full-screen layer: panel docks on the right; click outside / Esc closes.
+    /// Exclusive keyboard so Esc always reaches us (search field won't swallow it).
+    fn open_sheet(&mut self) -> Task<Message> {
+        self.sheet_open = true;
+        self.slide_x = SLIDE_OFF;
+        self.slide_target = 0.0;
+        self.slide_closing = false;
+        let surface = cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(
+            cosmic::surface::action::app_layer_shell::<Window>(
+                |_app| cosmic::surface::action::LiveSettings::default(),
+                |_app: &mut Window| {
+                    use cosmic::cctk::sctk::shell::wlr_layer::{Anchor, KeyboardInteractivity};
+                    cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings {
+                        anchor: Anchor::TOP
+                            .union(Anchor::BOTTOM)
+                            .union(Anchor::LEFT)
+                            .union(Anchor::RIGHT),
+                        keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                        size: None,
+                        exclusive_zone: 0,
+                        namespace: "cheatsheet".to_string(),
+                        ..Default::default()
+                    }
+                },
+                Some(Box::new(|app: &Window| {
+                    let panel = widget::container(app.body())
+                        .width(Length::Fixed(PANEL_WIDTH))
+                        .height(Length::Fill)
+                        .class(cosmic::theme::Container::custom(|theme| {
+                            let cosmic = theme.cosmic();
+                            cosmic::widget::container::Style {
+                                background: Some(cosmic::iced::Background::Color(
+                                    cosmic.bg_color().into(),
+                                )),
+                                border: cosmic::iced::Border {
+                                    radius: cosmic::iced::border::Radius {
+                                        top_left: 12.0,
+                                        top_right: 0.0,
+                                        bottom_right: 0.0,
+                                        bottom_left: 12.0,
+                                    },
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }
+                        }));
+                    let panel = widget::mouse_area(panel).on_press(Message::Ignore);
+
+                    let dock = widget::container(
+                        widget::row::with_children(vec![
+                            widget::Space::new()
+                                .width(Length::Fixed(app.slide_x.max(0.0)))
+                                .into(),
+                            panel.into(),
+                        ])
+                        .height(Length::Fill),
+                    )
+                    .width(Length::Fixed(PANEL_WIDTH))
+                    .height(Length::Fill)
+                    .clip(true);
+
+                    // Dim/empty left side: click closes (same as GTK Super+P).
+                    let strip = widget::row::with_children(vec![
+                        widget::mouse_area(
+                            widget::container(widget::Space::new())
+                                .width(Length::Fill)
+                                .height(Length::Fill),
+                        )
+                        .on_press(Message::Close)
+                        .into(),
+                        dock.into(),
+                    ])
+                    .width(Length::Fill)
+                    .height(Length::Fill);
+
+                    Element::from(strip).map(cosmic::Action::App)
+                })),
+            ),
+        )));
+        Task::batch([
+            surface,
+            cosmic::widget::text_input::focus(self.search_id.clone()),
+        ])
     }
 
     fn persist_settings(&self) {
@@ -364,12 +476,13 @@ impl Window {
             remember: self.remember,
             learning: self.learning,
             compact: self.compact,
+            lang: Some(self.lang.to_string()),
         });
     }
 
     /// Full Cosmic list, optionally collapsed for compact overview.
     fn visible_shortcuts(&self) -> Vec<crate::shortcuts::Shortcut> {
-        crate::shortcuts::for_display(&self.shortcuts, self.lang, self.compact)
+        crate::shortcuts::for_display(&self.shortcuts, self.compact)
     }
 
     /// Visible clickable rows' commands, in render order (ACTIONS first, then
@@ -424,27 +537,27 @@ impl Window {
 
         // Title + hint (like the GTK sheet), then search + settings.
         children.push(
-            widget::text(i18n::tr(self.lang, "ui.title"))
+            widget::text(i18n::tr("ui.title"))
                 .size(17)
                 .class(cosmic::theme::Text::Accent)
                 .into(),
         );
         children.push(
-            widget::text(i18n::tr(self.lang, "ui.sub"))
+            widget::text(i18n::tr("ui.sub"))
                 .size(11)
                 .into(),
         );
         let mut header: Vec<Element<Message>> = vec![
-            widget::text_input::search_input(i18n::tr(self.lang, "ui.search"), &self.search)
+            widget::text_input::search_input(i18n::tr("ui.search"), &self.search)
                 .on_input(Message::Search)
                 .id(self.search_id.clone())
                 .width(Length::Fill)
                 .into(),
         ];
         let compact_label = if self.compact {
-            i18n::tr(self.lang, "ui.show_all")
+            i18n::tr("ui.show_all")
         } else {
-            i18n::tr(self.lang, "ui.compact_btn")
+            i18n::tr("ui.compact_btn")
         };
         header.push(
             widget::button::standard(compact_label)
@@ -498,8 +611,13 @@ impl Window {
             if rows.is_empty() {
                 continue;
             }
-            let title = i18n::tr(self.lang, sec_key);
-            children.push(heading_view(if title.is_empty() { sec_key } else { title }));
+            let title = i18n::tr(sec_key);
+            let heading = if title.is_empty() || title == *sec_key {
+                (*sec_key).to_string()
+            } else {
+                title
+            };
+            children.push(heading_view(&heading));
             children.extend(rows);
         }
 
@@ -588,7 +706,7 @@ impl Window {
         children.push(
             widget::row::with_children(vec![
                 widget::button::text("←").on_press(Message::CloseEditor).into(),
-                widget::text(i18n::tr(self.lang, "ui.editor_title"))
+                widget::text(i18n::tr("ui.editor_title"))
                     .size(15)
                     .class(cosmic::theme::Text::Accent)
                     .width(Length::Fill)
@@ -605,7 +723,7 @@ impl Window {
                 widget::toggler(self.remember)
                     .on_toggle(Message::ToggleRemember)
                     .into(),
-                widget::text(i18n::tr(self.lang, "ui.remember")).into(),
+                widget::text(i18n::tr("ui.remember")).into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -618,7 +736,7 @@ impl Window {
                 widget::toggler(self.learning)
                     .on_toggle(Message::ToggleLearning)
                     .into(),
-                widget::text(i18n::tr(self.lang, "ui.learning")).into(),
+                widget::text(i18n::tr("ui.learning")).into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -631,7 +749,7 @@ impl Window {
                 widget::toggler(self.compact)
                     .on_toggle(Message::ToggleCompact)
                     .into(),
-                widget::text(i18n::tr(self.lang, "ui.compact")).into(),
+                widget::text(i18n::tr("ui.compact")).into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -641,7 +759,7 @@ impl Window {
         // Language: same list / file as the GTK Super+P sheet.
         children.push(
             widget::row::with_children(vec![
-                widget::text(i18n::tr(self.lang, "ui.lang"))
+                widget::text(i18n::tr("ui.lang"))
                     .width(Length::Fill)
                     .into(),
                 widget::dropdown(
@@ -658,7 +776,11 @@ impl Window {
 
         // Existing custom shortcuts, each with a delete button.
         if self.custom.is_empty() {
-            children.push(widget::text("No custom shortcuts yet.").size(12).into());
+            children.push(
+                widget::text(i18n::tr("ui.custom_empty"))
+                    .size(12)
+                    .into(),
+            );
         }
         for (i, c) in self.custom.iter().enumerate() {
             let row = widget::row::with_children(vec![
@@ -672,28 +794,28 @@ impl Window {
         }
 
         // Add form.
-        children.push(heading_view("Add"));
+        children.push(heading_view(&i18n::tr("ui.add")));
         // Type toggle: shortcut vs note (hugselapp).
         children.push(
             widget::row::with_children(vec![
                 widget::toggler(self.form.is_note)
                     .on_toggle(Message::FormToggleNote)
                     .into(),
-                widget::text("Note (hugselapp — no shortcut)").into(),
+                widget::text(i18n::tr("ui.note_toggle")).into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
             .into(),
         );
         children.push(
-            widget::text_input::text_input("Name", &self.form.label)
+            widget::text_input::text_input(i18n::tr("ui.name_ph"), &self.form.label)
                 .on_input(Message::FormLabel)
                 .into(),
         );
         let value_ph = if self.form.is_note {
-            "Text"
+            i18n::tr("ui.text_ph")
         } else {
-            "Shortcut (e.g. Super + C)"
+            i18n::tr("ui.keys_ph")
         };
         children.push(
             widget::text_input::text_input(value_ph, &self.form.keys)
@@ -702,18 +824,18 @@ impl Window {
         );
         if !self.form.is_note {
             children.push(
-                widget::text_input::text_input("Command (optional)", &self.form.command)
+                widget::text_input::text_input(i18n::tr("ui.command_ph"), &self.form.command)
                     .on_input(Message::FormCommand)
                     .into(),
             );
         }
         children.push(
-            widget::text_input::text_input("Section (optional)", &self.form.section)
+            widget::text_input::text_input(i18n::tr("ui.section_ph"), &self.form.section)
                 .on_input(Message::FormSection)
                 .into(),
         );
         children.push(
-            widget::button::text("+ Add")
+            widget::button::text(format!("+ {}", i18n::tr("ui.add")))
                 .on_press(Message::AddCustom)
                 .into(),
         );
@@ -748,75 +870,12 @@ impl cosmic::Application for Window {
         // compositor versions and killed the surface. We round the content
         // container ourselves instead. Applies to both applet and window modes.
         window.core.set_auto_corner_radius(Default::default());
+        if !windowed {
+            crate::ipc::register_applet();
+        }
+        // Standalone `--window`: open immediately. Panel applet opens on demand.
         let task = if windowed {
-            // Right-edge strip only (not a full-screen modal). Other windows stay
-            // clickable/typable; Esc or Super+C closes. OnDemand keyboard so focus
-            // can leave the sheet.
-            window.slide_x = SLIDE_OFF;
-            window.slide_target = 0.0;
-            let surface = cosmic::task::message(cosmic::Action::Cosmic(cosmic::app::Action::Surface(
-                cosmic::surface::action::app_layer_shell::<Window>(
-                    |_app| cosmic::surface::action::LiveSettings::default(),
-                    |_app: &mut Window| {
-                        use cosmic::cctk::sctk::shell::wlr_layer::{Anchor, KeyboardInteractivity};
-                        cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings {
-                            anchor: Anchor::TOP
-                                .union(Anchor::BOTTOM)
-                                .union(Anchor::RIGHT),
-                            keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                            size: Some((Some(PANEL_WIDTH as u32), None)),
-                            exclusive_zone: 0,
-                            namespace: "cheatsheet".to_string(),
-                            ..Default::default()
-                        }
-                    },
-                    Some(Box::new(|app: &Window| {
-                        let panel = widget::container(app.body())
-                            .width(Length::Fixed(PANEL_WIDTH))
-                            .height(Length::Fill)
-                            .class(cosmic::theme::Container::custom(|theme| {
-                                let cosmic = theme.cosmic();
-                                cosmic::widget::container::Style {
-                                    background: Some(cosmic::iced::Background::Color(
-                                        cosmic.bg_color().into(),
-                                    )),
-                                    border: cosmic::iced::Border {
-                                        // Rounded on the open (left) edge only.
-                                        radius: cosmic::iced::border::Radius {
-                                            top_left: 12.0,
-                                            top_right: 0.0,
-                                            bottom_right: 0.0,
-                                            bottom_left: 12.0,
-                                        },
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                }
-                            }));
-
-                        // Leading spacer of width `slide_x` pushes content off to the
-                        // right; animating PANEL_WIDTH → 0 slides the panel in.
-                        let dock = widget::container(
-                            widget::row::with_children(vec![
-                                widget::Space::new()
-                                    .width(Length::Fixed(app.slide_x.max(0.0)))
-                                    .into(),
-                                panel.into(),
-                            ])
-                            .height(Length::Fill),
-                        )
-                        .width(Length::Fixed(PANEL_WIDTH))
-                        .height(Length::Fill)
-                        .clip(true);
-
-                        Element::from(dock).map(cosmic::Action::App)
-                    })),
-                ),
-            )));
-            Task::batch([
-                surface,
-                cosmic::widget::text_input::focus(window.search_id.clone()),
-            ])
+            window.open_sheet()
         } else {
             Task::none()
         };
@@ -862,7 +921,7 @@ impl cosmic::Application for Window {
             Message::NavActivate => {
                 if let Some(argv) = self.nav_commands().get(self.selected).cloned() {
                     spawn(&argv);
-                    if self.windowed {
+                    if self.sheet_is_open() {
                         return self.begin_close();
                     }
                 }
@@ -897,7 +956,7 @@ impl cosmic::Application for Window {
                 self.selected = 0;
             }
             Message::ShortcutsChanged(_) => {
-                self.shortcuts = crate::shortcuts::load(self.lang);
+                self.shortcuts = crate::shortcuts::load();
                 self.selected = 0;
             }
             Message::SurfaceReady(id) => {
@@ -932,23 +991,24 @@ impl cosmic::Application for Window {
             }
             Message::SetLang(i) => {
                 if let Some(code) = i18n::LANGS.get(i).copied() {
-                    if code != self.lang {
-                        self.lang = code;
-                        i18n::save_ui_lang(code);
-                        self.shortcuts = crate::shortcuts::load(self.lang);
+                    if code != self.lang && i18n::set_lang(code) {
+                        self.lang = i18n::current_lang();
+                        self.persist_settings();
+                        self.shortcuts = crate::shortcuts::load();
                         self.selected = 0;
                     }
                 }
             }
-            Message::ToggleWindow => {
-                // Open (or toggle) the right-edge sheet — same as Super+C.
-                let exe = window_exe();
-                if let Err(e) = std::process::Command::new(&exe).arg("--window").spawn() {
-                    log::warn!("failed to open cheatsheet window via {}: {e}", exe.display());
+            Message::IpcPoll => {
+                if crate::ipc::take_toggle_request() {
+                    return self.toggle_sheet();
                 }
             }
+            Message::ToggleWindow => {
+                return self.toggle_sheet();
+            }
             Message::Close => {
-                if self.windowed {
+                if self.sheet_is_open() || self.windowed {
                     return self.begin_close();
                 }
             }
@@ -958,7 +1018,7 @@ impl cosmic::Application for Window {
             }
             Message::Launch(argv) => {
                 spawn(&argv);
-                if self.windowed {
+                if self.sheet_is_open() {
                     return self.begin_close();
                 }
             }
@@ -1023,7 +1083,7 @@ impl cosmic::Application for Window {
 
         Element::from(self.core.applet.applet_tooltip::<Message>(
             btn,
-            "Keyboard shortcuts",
+            i18n::tr("ui.tooltip"),
             false,
             Message::Surface,
             None,
@@ -1040,30 +1100,31 @@ impl cosmic::Application for Window {
             Message::ShortcutsChanged(update.config)
         });
 
-        if !self.windowed {
-            return shortcuts_watch;
-        }
-
-        let keys = cosmic::iced::event::listen_with(|event, _status, id| {
-            use cosmic::iced::keyboard::{key::Named, Event as KeyEvent, Key};
-            match event {
-                cosmic::iced::Event::Keyboard(KeyEvent::KeyPressed {
-                    key: Key::Named(named),
-                    ..
-                }) => match named {
-                    Named::Escape => Some(Message::Close),
-                    Named::ArrowDown => Some(Message::NavDown),
-                    Named::ArrowUp => Some(Message::NavUp),
-                    Named::Enter => Some(Message::NavActivate),
+        // Always listen while a sheet may be open (incl. before SurfaceReady).
+        let keys = if self.sheet_is_open() || self.windowed {
+            cosmic::iced::event::listen_with(|event, _status, id| {
+                use cosmic::iced::keyboard::{key::Named, Event as KeyEvent, Key};
+                match event {
+                    cosmic::iced::Event::Keyboard(KeyEvent::KeyPressed {
+                        key: Key::Named(named),
+                        ..
+                    }) => match named {
+                        // Handle Esc even if the search field captured the event.
+                        Named::Escape => Some(Message::Close),
+                        Named::ArrowDown => Some(Message::NavDown),
+                        Named::ArrowUp => Some(Message::NavUp),
+                        Named::Enter => Some(Message::NavActivate),
+                        _ => None,
+                    },
+                    cosmic::iced::Event::Window(window::Event::Opened { .. }) => {
+                        Some(Message::SurfaceReady(id))
+                    }
                     _ => None,
-                },
-                // Focus the search field once the surface is up; remember its id for clean close.
-                cosmic::iced::Event::Window(window::Event::Opened { .. }) => {
-                    Some(Message::SurfaceReady(id))
                 }
-                _ => None,
-            }
-        });
+            })
+        } else {
+            cosmic::iced::Subscription::none()
+        };
 
         let anim = if self.animating() || self.slide_closing {
             cosmic::iced::time::every(std::time::Duration::from_millis(16))
@@ -1072,7 +1133,14 @@ impl cosmic::Application for Window {
             cosmic::iced::Subscription::none()
         };
 
-        cosmic::iced::Subscription::batch([shortcuts_watch, keys, anim])
+        let ipc = if !self.windowed {
+            cosmic::iced::time::every(std::time::Duration::from_millis(150))
+                .map(|_| Message::IpcPoll)
+        } else {
+            cosmic::iced::Subscription::none()
+        };
+
+        cosmic::iced::Subscription::batch([shortcuts_watch, keys, anim, ipc])
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Message> {

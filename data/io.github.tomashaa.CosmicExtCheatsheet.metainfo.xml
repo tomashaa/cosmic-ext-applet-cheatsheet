@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<component type="desktop-application">
+  <id>io.github.tomashaa.CosmicExtCheatsheet</id>
+  <name>COSMIC Cheat Sheet</name>
+  <summary>Searchable keyboard-shortcut cheat sheet for COSMIC</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.tomashaa">
+    <name>Tomas Haaland</name>
+  </developer>
+  <description>
+    <p>
+      A COSMIC panel applet and Super-key overlay that shows your actual keyboard
+      shortcuts — read live from COSMIC Settings — as a searchable, learnable
+      cheat sheet with compact overview, symbolic icons, and optional custom notes.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/tomashaa/cosmic-ext-applet-cheatsheet</url>
+  <url type="bugtracker">https://github.com/tomashaa/cosmic-ext-applet-cheatsheet/issues</url>
+  <launchable type="desktop-id">io.github.tomashaa.CosmicExtCheatsheet.desktop</launchable>
+  <provides>
+    <id>com.system76.CosmicApplet</id>
+    <binary>cosmic-ext-applet-cheatsheet</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-07-26" />
+  </releases>
+</component>

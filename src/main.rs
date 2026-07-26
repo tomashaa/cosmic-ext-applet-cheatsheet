@@ -6,6 +6,7 @@
 
 mod config;
 mod i18n;
+mod ipc;
 mod shortcuts;
 mod window;
 
@@ -26,7 +27,21 @@ fn read_live_pid(p: &std::path::Path) -> Option<u32> {
 
 /// Open the cheat sheet as a standalone window; a second invocation while one
 /// is already open closes it instead (toggle), so a keybind toggles it.
+///
+/// Prefer toggling a live panel applet via IPC when one is registered.
 fn run_window() -> cosmic::iced::Result {
+    // 1) Panel applet running → ask it to open/close in-process.
+    if ipc::request_applet_toggle() {
+        return Ok(());
+    }
+
+    // 2) Any orphaned `--window` sheets → kill them (acts as "close").
+    if ipc::kill_windowed_instances() {
+        let _ = std::fs::remove_file(pid_path());
+        return Ok(());
+    }
+
+    // 3) PID-file toggle (legacy / single-instance).
     let pidf = pid_path();
     if let Some(pid) = read_live_pid(&pidf) {
         let _ = std::process::Command::new("kill")
@@ -35,9 +50,8 @@ fn run_window() -> cosmic::iced::Result {
         let _ = std::fs::remove_file(&pidf);
         return Ok(());
     }
+
     let _ = std::fs::write(&pidf, std::process::id().to_string());
-    // No main window: the cheat sheet lives in a top-anchored layer surface
-    // created in Window::init (see window.rs).
     let settings = cosmic::app::Settings::default().no_main_window(true);
     let result = cosmic::app::run::<Window>(settings, true);
     let _ = std::fs::remove_file(&pidf);
@@ -48,12 +62,12 @@ fn main() -> cosmic::iced::Result {
     let env = env_logger::Env::default().filter_or("RUST_LOG", "warn");
     env_logger::init_from_env(env);
 
-    // Debug: print the parsed actual shortcuts and exit.
     if std::env::args().any(|a| a == "--dump-shortcuts") {
-        let lang = i18n::current_lang();
+        let settings = config::load_settings();
+        i18n::init(settings.lang.as_deref());
         let compact = !std::env::args().any(|a| a == "--all");
-        let full = shortcuts::load(lang);
-        let list = shortcuts::for_display(&full, lang, compact);
+        let full = shortcuts::load();
+        let list = shortcuts::for_display(&full, compact);
         println!(
             "# {} rows ({})",
             list.len(),
@@ -70,8 +84,6 @@ fn main() -> cosmic::iced::Result {
         return Ok(());
     }
 
-    // `--window`: open the cheat sheet as a standalone window (for a keybind
-    // like Super+C). Otherwise run as a COSMIC panel applet.
     if std::env::args().any(|a| a == "--window") {
         run_window()
     } else {

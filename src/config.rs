@@ -109,6 +109,9 @@ pub struct Settings {
     /// Compact overview (merge directions / workspaces, hide media keys). Default on.
     #[serde(default = "default_true")]
     pub compact: bool,
+    /// UI language override (`nor`, `eng`, …). `None` = system locale (+ legacy fallback).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 impl Default for Settings {
@@ -117,6 +120,7 @@ impl Default for Settings {
             remember: true,
             learning: false,
             compact: true,
+            lang: None,
         }
     }
 }

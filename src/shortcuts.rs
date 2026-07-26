@@ -61,41 +61,41 @@ fn pretty_keys(binding: &Binding) -> String {
         .join(" + ")
 }
 
-fn tr_or(lang: &str, key: &str, en: &str) -> String {
-    let t = i18n::tr(lang, key);
-    if t.is_empty() {
+fn tr_or(key: &str, en: &str) -> String {
+    let t = i18n::tr(key);
+    if t.is_empty() || t == key || t == key.replace('.', "-") {
         en.to_string()
     } else {
-        t.to_string()
+        t
     }
 }
 
-fn tr_arg(lang: &str, key: &str, en_fmt: &str, arg: &str) -> String {
-    let t = i18n::tr(lang, key);
-    if t.is_empty() {
+fn tr_arg(key: &str, en_fmt: &str, arg: &str) -> String {
+    let t = i18n::tr_arg(key, arg);
+    if t.is_empty() || t == key || t == key.replace('.', "-") {
         en_fmt.replace("{}", arg)
     } else {
-        t.replace("{}", arg)
+        t
     }
 }
 
-fn dir_word(lang: &str, d: Direction) -> String {
+fn dir_word(d: Direction) -> String {
     match d {
-        Direction::Left => tr_or(lang, "dir.left", "left"),
-        Direction::Right => tr_or(lang, "dir.right", "right"),
-        Direction::Up => tr_or(lang, "dir.up", "up"),
-        Direction::Down => tr_or(lang, "dir.down", "down"),
+        Direction::Left => tr_or("dir.left", "left"),
+        Direction::Right => tr_or("dir.right", "right"),
+        Direction::Up => tr_or("dir.up", "up"),
+        Direction::Down => tr_or("dir.down", "down"),
     }
 }
 
-fn focus_word(lang: &str, d: FocusDirection) -> String {
+fn focus_word(d: FocusDirection) -> String {
     match d {
-        FocusDirection::Left => tr_or(lang, "dir.left", "left"),
-        FocusDirection::Right => tr_or(lang, "dir.right", "right"),
-        FocusDirection::Up => tr_or(lang, "dir.up", "up"),
-        FocusDirection::Down => tr_or(lang, "dir.down", "down"),
-        FocusDirection::In => tr_or(lang, "dir.in", "in"),
-        FocusDirection::Out => tr_or(lang, "dir.out", "out"),
+        FocusDirection::Left => tr_or("dir.left", "left"),
+        FocusDirection::Right => tr_or("dir.right", "right"),
+        FocusDirection::Up => tr_or("dir.up", "up"),
+        FocusDirection::Down => tr_or("dir.down", "down"),
+        FocusDirection::In => tr_or("dir.in", "in"),
+        FocusDirection::Out => tr_or("dir.out", "out"),
     }
 }
 
@@ -105,8 +105,9 @@ pub fn split_command(cmd: &str) -> Vec<String> {
 }
 
 fn is_self_cheatsheet(cmd: &str) -> bool {
-    cmd.to_ascii_lowercase()
-        .contains("cosmic-ext-applet-cheatsheet")
+    let lower = cmd.to_ascii_lowercase();
+    lower.contains("cosmic-ext-applet-cheatsheet")
+        || lower.contains("io.github.tomashaa.cosmicextcheatsheet")
 }
 
 fn spawn_bin(cmd: &str) -> String {
@@ -157,36 +158,36 @@ fn spawn_icon(cmd: &str) -> Option<&'static str> {
     })
 }
 
-fn spawn_label(lang: &str, cmd: &str, description: Option<&str>) -> String {
+fn spawn_label(cmd: &str, description: Option<&str>) -> String {
     if let Some(desc) = description.filter(|d| !d.trim().is_empty()) {
         return desc.to_string();
     }
     let bin = spawn_bin(cmd);
     match bin.as_str() {
-        "cosmic-files" => tr_or(lang, "act.files", "Files"),
-        "cosmic-term" => tr_or(lang, "act.terminal", "Terminal"),
-        "cosmic-edit" => tr_or(lang, "act.editor", "Editor"),
-        "cosmic-settings" => tr_or(lang, "act.settings", "Settings"),
-        "cosmic-app-library" => tr_or(lang, "act.app_lib", "App library"),
-        "cosmic-workspaces" => tr_or(lang, "act.workspaces", "Workspaces"),
-        "cosmic-screenshot" => tr_or(lang, "act.shot_file", "Screenshot → file"),
-        "cosmic-shot-clip" => tr_or(lang, "act.shot_clip", "Screenshot → clipboard"),
-        "cosmic-ocr-clip" => tr_or(lang, "act.ocr", "Text from image (OCR)"),
-        "cosmic-ocr-settings" => tr_or(lang, "act.ocr_lang", "OCR language (setting)"),
-        "cosmic-clip-history" => tr_or(lang, "act.clip_history", "Clipboard history"),
-        "cosmic-panel-reset" => tr_or(lang, "act.panel_reset", "Reset panel/dock"),
-        "cosmic-annotate" => tr_or(lang, "act.annotate", "Annotate"),
+        "cosmic-files" => tr_or("act.files", "Files"),
+        "cosmic-term" => tr_or("act.terminal", "Terminal"),
+        "cosmic-edit" => tr_or("act.editor", "Editor"),
+        "cosmic-settings" => tr_or("act.settings", "Settings"),
+        "cosmic-app-library" => tr_or("act.app_lib", "App library"),
+        "cosmic-workspaces" => tr_or("act.workspaces", "Workspaces"),
+        "cosmic-screenshot" => tr_or("act.shot_file", "Screenshot → file"),
+        "cosmic-shot-clip" => tr_or("act.shot_clip", "Screenshot → clipboard"),
+        "cosmic-ocr-clip" => tr_or("act.ocr", "Text from image (OCR)"),
+        "cosmic-ocr-settings" => tr_or("act.ocr_lang", "OCR language (setting)"),
+        "cosmic-clip-history" => tr_or("act.clip_history", "Clipboard history"),
+        "cosmic-panel-reset" => tr_or("act.panel_reset", "Reset panel/dock"),
+        "cosmic-annotate" => tr_or("act.annotate", "Annotate"),
         "cosmic-cheatsheet-toggle" | "cosmic-cheatsheet" => {
-            tr_or(lang, "act.cheat_gtk", "Cheat sheet (GTK)")
+            tr_or("act.cheat_gtk", "Cheat sheet (GTK)")
         }
         "cosmic-clip-slot" => {
             let args = split_command(cmd);
             if args.iter().any(|a| a == "save") {
-                tr_or(lang, "d.save_slot", "Save to slot 1–9")
+                tr_or("d.save_slot", "Save to slot 1–9")
             } else if args.iter().any(|a| a == "paste") {
-                tr_or(lang, "d.paste_slot", "Paste from slot 1–9")
+                tr_or("d.paste_slot", "Paste from slot 1–9")
             } else {
-                tr_or(lang, "act.clip_history", "Clipboard history")
+                tr_or("act.clip_history", "Clipboard history")
             }
         }
         other => other.to_string(),
@@ -282,7 +283,7 @@ struct Described {
 }
 
 /// Map an action to display metadata. None to hide it.
-fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described> {
+fn describe(action: &Action, binding: &Binding) -> Option<Described> {
     match action {
         Action::Disable | Action::Debug => None,
         Action::Spawn(cmd) => {
@@ -291,7 +292,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             }
             let (compact_key, compact_hide) = spawn_compact(cmd);
             Some(Described {
-                label: spawn_label(lang, cmd, binding.description.as_deref()),
+                label: spawn_label(cmd, binding.description.as_deref()),
                 section: "sec.apps",
                 command: Some(split_command(cmd)),
                 icon: spawn_icon(cmd),
@@ -300,7 +301,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             })
         }
         Action::Close => Some(Described {
-            label: tr_or(lang, "d.close", "Close window"),
+            label: tr_or("d.close", "Close window"),
             section: "sec.window",
             command: None,
             icon: Some("window-close-symbolic"),
@@ -308,7 +309,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Terminate => Some(Described {
-            label: tr_or(lang, "act.terminate", "Force quit (kill window)"),
+            label: tr_or("act.terminate", "Force quit (kill window)"),
             section: "sec.window",
             command: None,
             icon: Some("process-stop-symbolic"),
@@ -316,7 +317,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Maximize => Some(Described {
-            label: tr_or(lang, "d.maximize", "Maximize"),
+            label: tr_or("d.maximize", "Maximize"),
             section: "sec.window",
             command: None,
             icon: Some("window-maximize-symbolic"),
@@ -324,7 +325,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Fullscreen => Some(Described {
-            label: tr_or(lang, "d.fullscreen", "Fullscreen"),
+            label: tr_or("d.fullscreen", "Fullscreen"),
             section: "sec.window",
             command: None,
             icon: Some("view-fullscreen-symbolic"),
@@ -332,7 +333,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Minimize => Some(Described {
-            label: tr_or(lang, "act.minimize", "Minimize"),
+            label: tr_or("act.minimize", "Minimize"),
             section: "sec.window",
             command: None,
             icon: Some("window-minimize-symbolic"),
@@ -340,7 +341,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ToggleWindowFloating => Some(Described {
-            label: tr_or(lang, "d.floating", "Floating (exempt from tiling)"),
+            label: tr_or("d.floating", "Floating (exempt from tiling)"),
             section: "sec.window",
             command: None,
             icon: Some("window-pop-out-symbolic"),
@@ -348,7 +349,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ToggleTiling => Some(Described {
-            label: tr_or(lang, "d.toggle_tiling", "Toggle tiling on/off"),
+            label: tr_or("d.toggle_tiling", "Toggle tiling on/off"),
             section: "sec.window",
             command: None,
             icon: Some("com.system76.CosmicAppletTiling-symbolic"),
@@ -356,7 +357,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ToggleStacking => Some(Described {
-            label: tr_or(lang, "d.stack_tabs", "Stack windows (tabs) on/off"),
+            label: tr_or("d.stack_tabs", "Stack windows (tabs) on/off"),
             section: "sec.window",
             command: None,
             icon: Some("window-stack-symbolic"),
@@ -364,7 +365,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ToggleOrientation => Some(Described {
-            label: tr_or(lang, "d.split_dir", "Switch split direction"),
+            label: tr_or("d.split_dir", "Switch split direction"),
             section: "sec.window",
             command: None,
             icon: Some("object-flip-horizontal-symbolic"),
@@ -372,7 +373,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ToggleSticky => Some(Described {
-            label: tr_or(lang, "act.toggle_sticky", "Toggle sticky"),
+            label: tr_or("act.toggle_sticky", "Toggle sticky"),
             section: "sec.window",
             command: None,
             icon: Some("emblem-important-symbolic"),
@@ -380,7 +381,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::SwapWindow => Some(Described {
-            label: tr_or(lang, "d.swap", "Swap two windows"),
+            label: tr_or("d.swap", "Swap two windows"),
             section: "sec.window",
             command: None,
             icon: Some("window-swap-symbolic"),
@@ -388,7 +389,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Resizing(ResizeDirection::Inwards) => Some(Described {
-            label: tr_or(lang, "act.resize_in", "Resize in"),
+            label: tr_or("act.resize_in", "Resize in"),
             section: "sec.window",
             command: None,
             icon: Some("zoom-out-symbolic"),
@@ -396,7 +397,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::Resizing(ResizeDirection::Outwards) => Some(Described {
-            label: tr_or(lang, "act.resize_out", "Resize out"),
+            label: tr_or("act.resize_out", "Resize out"),
             section: "sec.window",
             command: None,
             icon: Some("zoom-in-symbolic"),
@@ -413,7 +414,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
                 FocusDirection::Out => (Some("focus_stack"), Some("window-pop-out-symbolic")),
             };
             Some(Described {
-                label: tr_arg(lang, "act.focus", "Focus {}", &focus_word(lang, *d)),
+                label: tr_arg("act.focus", "Focus {}", &focus_word(*d)),
                 section: "sec.focus",
                 command: None,
                 icon,
@@ -429,7 +430,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
                 Direction::Down => "go-down-symbolic",
             };
             Some(Described {
-                label: tr_arg(lang, "act.move_win", "Move window {}", &dir_word(lang, *d)),
+                label: tr_arg("act.move_win", "Move window {}", &dir_word(*d)),
                 section: "sec.focus",
                 command: None,
                 icon: Some(icon),
@@ -438,7 +439,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             })
         }
         Action::Workspace(_) => Some(Described {
-            label: tr_or(lang, "d.goto_ws", "Go to workspace 1–9"),
+            label: tr_or("d.goto_ws", "Go to workspace 1–9"),
             section: "sec.ws",
             command: None,
             icon: Some("preferences-workspaces-symbolic"),
@@ -446,7 +447,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MoveToWorkspace(_) | Action::SendToWorkspace(_) => Some(Described {
-            label: tr_or(lang, "d.move_win_num", "Move window to no."),
+            label: tr_or("d.move_win_num", "Move window to no."),
             section: "sec.ws",
             command: None,
             icon: Some("go-jump-symbolic"),
@@ -454,7 +455,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::LastWorkspace => Some(Described {
-            label: tr_or(lang, "act.last_ws", "Last workspace"),
+            label: tr_or("act.last_ws", "Last workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-last-symbolic"),
@@ -462,7 +463,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MoveToLastWorkspace | Action::SendToLastWorkspace => Some(Described {
-            label: tr_or(lang, "act.move_to_last_ws", "Window to last workspace"),
+            label: tr_or("act.move_to_last_ws", "Window to last workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-last-symbolic"),
@@ -470,7 +471,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::NextWorkspace => Some(Described {
-            label: tr_or(lang, "act.next_ws", "Next workspace"),
+            label: tr_or("act.next_ws", "Next workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-next-symbolic"),
@@ -478,7 +479,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::PreviousWorkspace => Some(Described {
-            label: tr_or(lang, "act.prev_ws", "Previous workspace"),
+            label: tr_or("act.prev_ws", "Previous workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-previous-symbolic"),
@@ -486,7 +487,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MoveToNextWorkspace | Action::SendToNextWorkspace => Some(Described {
-            label: tr_or(lang, "act.move_to_next_ws", "Window to next workspace"),
+            label: tr_or("act.move_to_next_ws", "Window to next workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-next-symbolic"),
@@ -494,7 +495,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MoveToPreviousWorkspace | Action::SendToPreviousWorkspace => Some(Described {
-            label: tr_or(lang, "act.move_to_prev_ws", "Window to previous workspace"),
+            label: tr_or("act.move_to_prev_ws", "Window to previous workspace"),
             section: "sec.ws",
             command: None,
             icon: Some("go-previous-symbolic"),
@@ -502,7 +503,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::SwitchOutput(_) => Some(Described {
-            label: tr_or(lang, "act.switch_output_any", "Switch monitor"),
+            label: tr_or("act.switch_output_any", "Switch monitor"),
             section: "sec.monitor",
             command: None,
             icon: Some("video-display-symbolic"),
@@ -510,7 +511,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MoveToOutput(_) | Action::SendToOutput(_) => Some(Described {
-            label: tr_or(lang, "d.to_monitor", "To another monitor"),
+            label: tr_or("d.to_monitor", "To another monitor"),
             section: "sec.monitor",
             command: None,
             icon: Some("display-symbolic"),
@@ -518,7 +519,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::MigrateWorkspaceToOutput(_) => Some(Described {
-            label: tr_or(lang, "act.migrate_ws_any", "Workspace to another monitor"),
+            label: tr_or("act.migrate_ws_any", "Workspace to another monitor"),
             section: "sec.monitor",
             command: None,
             icon: Some("preferences-workspaces-symbolic"),
@@ -526,7 +527,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ZoomIn => Some(Described {
-            label: tr_or(lang, "act.zoom_in", "Zoom in"),
+            label: tr_or("act.zoom_in", "Zoom in"),
             section: "sec.zoom",
             command: None,
             icon: Some("zoom-in-symbolic"),
@@ -534,7 +535,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
             compact_hide: false,
         }),
         Action::ZoomOut => Some(Described {
-            label: tr_or(lang, "act.zoom_out", "Zoom out"),
+            label: tr_or("act.zoom_out", "Zoom out"),
             section: "sec.zoom",
             command: None,
             icon: Some("zoom-out-symbolic"),
@@ -581,7 +582,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
                 System::PowerOff => ("act.power_off", "Power off", "sec.system"),
             };
             Some(Described {
-                label: tr_or(lang, key, en),
+                label: tr_or(key, en),
                 section,
                 command: None,
                 icon: system_icon(sys),
@@ -602,7 +603,7 @@ fn describe(lang: &str, action: &Action, binding: &Binding) -> Option<Described>
 }
 
 /// Load the actual COSMIC shortcuts (defaults + custom merge), localized.
-pub fn load(lang: &str) -> Vec<Shortcut> {
+pub fn load() -> Vec<Shortcut> {
     let Ok(ctx) = shortcuts::context() else {
         log::warn!("could not open COSMIC shortcuts config context");
         return Vec::new();
@@ -611,7 +612,7 @@ pub fn load(lang: &str) -> Vec<Shortcut> {
 
     let mut out = Vec::new();
     for (binding, action) in map.iter() {
-        let Some(d) = describe(lang, action, binding) else {
+        let Some(d) = describe(action, binding) else {
             continue;
         };
         let keys = pretty_keys(binding);
@@ -633,12 +634,18 @@ pub fn load(lang: &str) -> Vec<Shortcut> {
     out
 }
 
+/// Families that are always collapsed to one row (even in "show all").
+/// Numbered clip slots are useless as nine identical labels.
+const ALWAYS_MERGE: &[&str] = &["clip_save", "clip_paste"];
+
 /// View of shortcuts for the UI: full list, or Super+P-style compact.
-pub fn for_display(full: &[Shortcut], lang: &str, compact: bool) -> Vec<Shortcut> {
-    if !compact {
-        return full.to_vec();
+/// Clip save/paste slots are always merged to one row each.
+pub fn for_display(full: &[Shortcut], compact: bool) -> Vec<Shortcut> {
+    if compact {
+        compactify(full)
+    } else {
+        collapse_families(full, ALWAYS_MERGE, false)
     }
-    compactify(full, lang)
 }
 
 fn sort_shortcuts(out: &mut [Shortcut]) {
@@ -794,42 +801,52 @@ fn try_merge_number_series(keys: &[String]) -> Option<String> {
     }
 }
 
-fn compact_label(lang: &str, key: &str, fallback: &str) -> String {
+fn compact_label(key: &str, fallback: &str) -> String {
     match key {
-        "focus_cardinal" => tr_or(lang, "d.move_focus", "Move focus between windows"),
-        "focus_stack" => tr_or(lang, "d.in_out_stack", "Into / out of stack"),
-        "move_cardinal" => tr_or(lang, "d.move_window", "Move window (builds corners)"),
-        "workspace_num" => tr_or(lang, "d.goto_ws", "Go to workspace 1–9"),
-        "move_to_ws_num" => tr_or(lang, "d.move_win_num", "Move window to no."),
-        "ws_next_prev" => tr_or(lang, "d.prev_next_ws", "Previous / next workspace"),
-        "move_ws_next_prev" => tr_or(lang, "d.move_prev_next", "Move to previous/next"),
-        "switch_output" => tr_or(lang, "act.switch_output_any", "Switch monitor"),
-        "move_to_output" => tr_or(lang, "d.to_monitor", "To another monitor"),
-        "migrate_ws" => tr_or(lang, "act.migrate_ws_any", "Workspace to another monitor"),
-        "resize" => tr_or(lang, "d.resize", "Resize out / in"),
-        "zoom" => tr_or(lang, "d.zoom", "Zoom in / out"),
-        "close" => tr_or(lang, "d.close", "Close window"),
-        "clip_save" => tr_or(lang, "d.save_slot", "Save to slot 1–9"),
-        "clip_paste" => tr_or(lang, "d.paste_slot", "Paste from slot 1–9"),
+        "focus_cardinal" => tr_or("d.move_focus", "Move focus between windows"),
+        "focus_stack" => tr_or("d.in_out_stack", "Into / out of stack"),
+        "move_cardinal" => tr_or("d.move_window", "Move window (builds corners)"),
+        "workspace_num" => tr_or("d.goto_ws", "Go to workspace 1–9"),
+        "move_to_ws_num" => tr_or("d.move_win_num", "Move window to no."),
+        "ws_next_prev" => tr_or("d.prev_next_ws", "Previous / next workspace"),
+        "move_ws_next_prev" => tr_or("d.move_prev_next", "Move to previous/next"),
+        "switch_output" => tr_or("act.switch_output_any", "Switch monitor"),
+        "move_to_output" => tr_or("d.to_monitor", "To another monitor"),
+        "migrate_ws" => tr_or("act.migrate_ws_any", "Workspace to another monitor"),
+        "resize" => tr_or("d.resize", "Resize out / in"),
+        "zoom" => tr_or("d.zoom", "Zoom in / out"),
+        "close" => tr_or("d.close", "Close window"),
+        "clip_save" => tr_or("d.save_slot", "Save to slot 1–9"),
+        "clip_paste" => tr_or("d.paste_slot", "Paste from slot 1–9"),
         _ => fallback.to_string(),
     }
 }
 
-fn compactify(full: &[Shortcut], lang: &str) -> Vec<Shortcut> {
+fn compactify(full: &[Shortcut]) -> Vec<Shortcut> {
+    collapse_families(full, &[], true)
+}
+
+/// Collapse rows that share a `compact_key`.
+/// - `only_keys`: if non-empty, only those families are merged; others stay as-is.
+/// - `full_compact`: also drop media / XF86 keys and merge every compact_key family.
+fn collapse_families(full: &[Shortcut], only_keys: &[&str], full_compact: bool) -> Vec<Shortcut> {
     let mut groups: BTreeMap<&'static str, Vec<&Shortcut>> = BTreeMap::new();
     let mut singles: Vec<Shortcut> = Vec::new();
 
     for s in full {
-        if s.compact_hide {
+        if full_compact && s.compact_hide {
             continue;
         }
-        // Hardware media / special keys clutter the overview — hide in compact.
-        if s.keys.contains("XF86") {
+        if full_compact && s.keys.contains("XF86") {
             continue;
         }
         match s.compact_key {
-            Some(key) => groups.entry(key).or_default().push(s),
-            None => singles.push(s.clone()),
+            Some(key)
+                if full_compact || only_keys.is_empty() || only_keys.contains(&key) =>
+            {
+                groups.entry(key).or_default().push(s);
+            }
+            _ => singles.push(s.clone()),
         }
     }
 
@@ -854,7 +871,7 @@ fn compactify(full: &[Shortcut], lang: &str) -> Vec<Shortcut> {
         let command = entries.iter().find_map(|e| e.command.clone());
         out.push(Shortcut {
             keys,
-            label: compact_label(lang, key, &first.label),
+            label: compact_label(key, &first.label),
             icon: compact_icon(key, first.icon),
             command,
             section: first.section,
