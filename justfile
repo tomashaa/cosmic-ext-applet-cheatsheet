@@ -3,6 +3,7 @@ appid := "io.github.tomashaa.CosmicExtCheatsheet"
 bindir := env_var('HOME') / ".local/bin"
 appsdir := env_var('HOME') / ".local/share/applications"
 metainfodir := env_var('HOME') / ".local/share/metainfo"
+iconsdir := env_var('HOME') / ".local/share/icons/hicolor/scalable/apps"
 export CARGO_TARGET_DIR := env_var_or_default('CARGO_TARGET_DIR', justfile_directory() / "target")
 
 # Default: release build.
@@ -14,16 +15,18 @@ build-release *args:
 build-debug *args:
     cargo build {{args}}
 
-# Install the binary + desktop + metainfo into ~/.local.
+# Install the binary + desktop + icon + metainfo into ~/.local.
 install: build-release
     install -Dm755 {{CARGO_TARGET_DIR}}/release/{{name}} {{bindir}}/{{name}}
     install -Dm644 data/{{appid}}.desktop {{appsdir}}/{{appid}}.desktop
     install -Dm644 data/{{appid}}.metainfo.xml {{metainfodir}}/{{appid}}.metainfo.xml
-    @echo "Installed. Add the applet to your panel in COSMIC Settings, and bind"
+    install -Dm644 data/icons/hicolor/scalable/apps/{{appid}}-symbolic.svg {{iconsdir}}/{{appid}}-symbolic.svg
+    -gtk-update-icon-cache -f {{env_var('HOME')}}/.local/share/icons/hicolor 2>/dev/null
+    @echo "Installed. Add the applet in COSMIC Settings, and bind"
     @echo "'{{name}} --window' to a key (e.g. Super+C)."
 
 uninstall:
-    rm -f {{bindir}}/{{name}} {{appsdir}}/{{appid}}.desktop {{metainfodir}}/{{appid}}.metainfo.xml
+    rm -f {{bindir}}/{{name}} {{appsdir}}/{{appid}}.desktop {{metainfodir}}/{{appid}}.metainfo.xml {{iconsdir}}/{{appid}}-symbolic.svg
 
 # Run the standalone overlay for testing.
 run:

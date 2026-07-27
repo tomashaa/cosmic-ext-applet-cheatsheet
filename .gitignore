@@ -1,3 +1,6 @@
 target/
 vendor/
 .cargo/
+diag.txt
+*.log
+.DS_Store

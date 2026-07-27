@@ -1,7 +1,7 @@
 # cosmic-ext-applet-cheatsheet
 
-A COSMIC panel applet + Super-key overlay that shows your **actual keyboard
-shortcuts** — read live from COSMIC's own config — as a searchable, learnable
+A COSMIC **panel applet** + keybind overlay that shows your **actual keyboard
+shortcuts** — read live from COSMIC Settings — as a searchable, learnable
 cheat sheet.
 
 Unlike a static list, it reads `com.system76.CosmicSettings.Shortcuts` (system
@@ -9,67 +9,71 @@ defaults + your custom bindings), so it always reflects *your* real keybindings
 per machine. App-launch (`Spawn`) bindings stay clickable, and you can add your
 own extra shortcuts and notes on top.
 
+> Community extension (`cosmic-ext-*`). Works across COSMIC sessions (Pop!_OS /
+> System76 and other COSMIC installs). Not a first-party `cosmic-applets` package.
+
 ## Features
 
-- **Live COSMIC shortcuts** — defaults + custom, merged and grouped (Apps,
-  System, Windows, Focus & move, Workspaces, Monitors, Zoom).
-- **Non-modal right-edge panel** — slides in from the right; the rest of the
-  desktop stays clickable and typable. Close with Esc or Super+C (toggle).
-- **Panel applet + keybind** — panel icon opens the sheet **in-process**;
-  `cosmic-ext-applet-cheatsheet --window` (e.g. Super+C) toggles the running
-  applet when present, otherwise opens a short-lived standalone sheet.
-- **Search** with autofocus, **arrow-key navigation** + Enter to launch.
-- **Compact overview (default)** — merges arrow/workspace duplicates and hides
-  media keys; toggle **Show all** for the full dump.
-- **Cosmic symbolic icons** on rows for faster scanning.
-- **Fluent i18n** (9 languages) with a language picker in ⚙; stored in
-  `settings.toml` (falls back to system locale, then legacy
-  `~/.config/cosmic-clip/ui-lang` if present).
-- **Learning mode** — mark shortcuts as learned to hide them (persisted).
-- **Custom shortcuts & notes** — add/edit/delete from the ⚙ editor
-  (`custom.toml`).
-- **Remembers** last search + scroll across opens (optional).
+- **Live COSMIC shortcuts** — defaults + custom, merged and grouped
+- **Non-modal right-edge sheet** — desktop stays usable; Esc / Super+C / panel icon close
+- **Multi-monitor** — opens on the output where the pointer is
+- **Panel applet + keybind** — in-process open from the icon; `--window` toggles via IPC
+- **Search**, arrow-key navigation, Enter to launch
+- **Compact overview** (default) with **Show all** for the full dump
+- **Symbolic icons**, **Fluent i18n** (9 languages), learning mode, custom notes
 
-## Build & install
+## Quick start
 
-Requires the Rust toolchain and a COSMIC session. [`just`](https://github.com/casey/just) is optional but convenient.
+Requires Rust + a COSMIC session. [`just`](https://github.com/casey/just) optional.
+
+```sh
+git clone https://github.com/tomashaa/cosmic-ext-applet-cheatsheet.git
+cd cosmic-ext-applet-cheatsheet
+just install    # binary + .desktop + icon + metainfo → ~/.local
+```
+
+1. **Panel:** COSMIC Settings → Desktop → Panel/Dock → add **Cheat Sheet**
+2. **Keybind** (recommended Super+C) → Spawn:
+   ```
+   cosmic-ext-applet-cheatsheet --window
+   ```
 
 ```sh
 just build      # cargo build --release
-just install    # binary + .desktop + metainfo → ~/.local
 just check      # clippy
+just uninstall  # remove ~/.local install
 ```
 
-Then add the applet to your panel (COSMIC Settings → Desktop → Panel → Configure
-applets), and optionally bind a key to:
+## Screenshots
 
-```
-cosmic-ext-applet-cheatsheet --window
+Open the sheet once on your machine, then drop images into `assets/` if you fork
+the README — for example:
+
+```sh
+# with the sheet open on COSMIC:
+grim ~/Pictures/cosmic-cheatsheet.png
 ```
 
-## Config files
+## Config
 
 | Path | Purpose |
 |------|---------|
-| `~/.config/cosmic-ext-cheatsheet/custom.toml` | Extra shortcuts / notes (`custom.toml.example`) |
+| `~/.config/cosmic-ext-cheatsheet/custom.toml` | Extra shortcuts / notes (see `custom.toml.example`) |
 | `~/.config/cosmic-ext-cheatsheet/settings.toml` | remember / learning / compact / **lang** |
 | `~/.config/cosmic-ext-cheatsheet/learned.toml` | Shortcuts marked as learned |
 
 ## Status
 
-Functional as a **community extension** (`cosmic-ext-*`). Not aimed at a PR into
-`pop-os/cosmic-applets` (first-party applets); distribution path is this repo /
-eventual Flatpak or COSMIC Store packaging.
+**v0.1.0** — ready to try and share as a community applet.
 
-Still rough for “upstream polish”:
+- Shortcut config live-reloads via `cosmic-config`
+- Corner-radius protocol disabled; rounding is drawn in-app
+- CI on GitHub Actions; `just vendor` for offline builds
+- Flatpak / COSMIC Store packaging: planned, not in this release
 
-- Shortcut config live-reloads via `cosmic-config` subscription.
-- Corner-radius protocol is disabled; the panel is rounded in-app instead.
-- Standalone `--window` without a running applet still uses a PID-file toggle.
-- CI builds on GitHub Actions; vendor recipe available via `just vendor`.
+Feedback and issues: <https://github.com/tomashaa/cosmic-ext-applet-cheatsheet/issues>
 
 ## License
 
-GPL-3.0-only — see [`LICENSE`](LICENSE). The binary links COSMIC crates
-(`cosmic-protocols`, `cosmic-client-toolkit`) that are GPL-3.0-only, so the
-whole work is distributed under the GPL.
+GPL-3.0-only — see [`LICENSE`](LICENSE). Links COSMIC crates that are
+GPL-3.0-only, so the whole work is distributed under the GPL.

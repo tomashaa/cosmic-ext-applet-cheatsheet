@@ -130,7 +130,6 @@ pub enum Message {
     /// Poll file IPC from `--window` / Super+C while the panel applet runs.
     IpcPoll,
     Close,
-    Focus,
     NavUp,
     NavDown,
     NavActivate,
@@ -141,7 +140,7 @@ pub enum Message {
     ToggleCompact(bool),
     /// Language picker index into [`i18n::LANGS`].
     SetLang(usize),
-    ShortcutsChanged(cosmic_shortcuts::Config),
+    ShortcutsChanged,
     /// Advance the right-edge slide animation one frame.
     AnimTick,
     OpenEditor,
@@ -893,20 +892,6 @@ impl cosmic::Application for Window {
                 self.selected = 0;
                 self.persist_state();
             }
-            Message::Focus => {
-                let focus = cosmic::widget::text_input::focus(self.search_id.clone());
-                if self.remember && self.restore_scroll > 0.0 {
-                    let scroll = cosmic::iced::widget::scrollable::snap_to(
-                        self.scroll_id.clone(),
-                        cosmic::iced::widget::scrollable::RelativeOffset {
-                            x: None,
-                            y: Some(self.restore_scroll),
-                        },
-                    );
-                    return Task::batch([focus, scroll]);
-                }
-                return focus;
-            }
             Message::NavDown => {
                 let n = self.nav_commands().len();
                 if n > 0 {
@@ -955,7 +940,7 @@ impl cosmic::Application for Window {
                 config::save_learned(&self.learned);
                 self.selected = 0;
             }
-            Message::ShortcutsChanged(_) => {
+            Message::ShortcutsChanged => {
                 self.shortcuts = crate::shortcuts::load();
                 self.selected = 0;
             }
@@ -965,7 +950,7 @@ impl cosmic::Application for Window {
                 self.slide_x = SLIDE_OFF;
                 self.slide_target = 0.0;
                 self.slide_closing = false;
-                // Same as Message::Focus: autofocus search (+ restore scroll).
+                // Autofocus search (+ restore scroll).
                 let focus = cosmic::widget::text_input::focus(self.search_id.clone());
                 if self.remember && self.restore_scroll > 0.0 {
                     let scroll = cosmic::iced::widget::scrollable::snap_to(
@@ -1089,7 +1074,7 @@ impl cosmic::Application for Window {
         let btn = self
             .core
             .applet
-            .icon_button("input-keyboard-symbolic")
+            .icon_button("io.github.tomashaa.CosmicExtCheatsheet-symbolic")
             .on_press(Message::ToggleWindow);
 
         Element::from(self.core.applet.applet_tooltip::<Message>(
@@ -1107,8 +1092,8 @@ impl cosmic::Application for Window {
             Cow::Borrowed(cosmic_shortcuts::ID),
             cosmic_shortcuts::Config::VERSION,
         )
-        .map(|update: cosmic::cosmic_config::Update<cosmic_shortcuts::Config>| {
-            Message::ShortcutsChanged(update.config)
+        .map(|_update: cosmic::cosmic_config::Update<cosmic_shortcuts::Config>| {
+            Message::ShortcutsChanged
         });
 
         // Always listen while a sheet may be open (incl. before SurfaceReady).
