@@ -1,0 +1,52 @@
+{
+  "id": "io.github.tomashaa.CosmicExtCheatsheet",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "25.08",
+  "base": "com.system76.Cosmic.BaseApp",
+  "base-version": "stable",
+  "sdk": "org.freedesktop.Sdk",
+  "sdk-extensions": ["org.freedesktop.Sdk.Extension.rust-stable"],
+  "command": "cosmic-ext-applet-cheatsheet",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc",
+    "--device=dri",
+    "--filesystem=xdg-config/cosmic:ro",
+    "--filesystem=xdg-config/cosmic-ext-cheatsheet:create",
+    "--filesystem=xdg-run",
+    "--talk-name=com.system76.CosmicSettingsDaemon",
+    "--talk-name=org.freedesktop.portal.Desktop",
+    "--env=RUST_LOG=warn"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/cosmic-ext-applet-cheatsheet/cargo"
+    }
+  },
+  "modules": [
+    {
+      "name": "cosmic-ext-applet-cheatsheet",
+      "buildsystem": "simple",
+      "build-options": {
+        "build-args": ["--share=network"]
+      },
+      "build-commands": [
+        "cargo build --release --verbose",
+        "install -Dm755 target/release/cosmic-ext-applet-cheatsheet /app/bin/cosmic-ext-applet-cheatsheet",
+        "install -Dm755 flatpak/launch-applet.sh /app/bin/launch-applet.sh",
+        "install -Dm644 data/io.github.tomashaa.CosmicExtCheatsheet.desktop /app/share/applications/io.github.tomashaa.CosmicExtCheatsheet.desktop",
+        "install -Dm644 data/io.github.tomashaa.CosmicExtCheatsheet.metainfo.xml /app/share/metainfo/io.github.tomashaa.CosmicExtCheatsheet.metainfo.xml",
+        "install -Dm644 data/icons/hicolor/scalable/apps/io.github.tomashaa.CosmicExtCheatsheet-symbolic.svg /app/share/icons/hicolor/scalable/apps/io.github.tomashaa.CosmicExtCheatsheet-symbolic.svg",
+        "desktop-file-edit --set-key=Exec --set-value='cosmic-ext-applet-cheatsheet' /app/share/applications/io.github.tomashaa.CosmicExtCheatsheet.desktop || true"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": ".."
+        }
+      ]
+    }
+  ]
+}

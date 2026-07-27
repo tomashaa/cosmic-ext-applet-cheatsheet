@@ -12,6 +12,8 @@ own extra shortcuts and notes on top.
 > Community extension (`cosmic-ext-*`). Works across COSMIC sessions (Pop!_OS /
 > System76 and other COSMIC installs). Not a first-party `cosmic-applets` package.
 
+![Cheat sheet open on the right edge](assets/screenshot.jpg)
+
 ## Features
 
 - **Live COSMIC shortcuts** — defaults + custom, merged and grouped
@@ -22,7 +24,7 @@ own extra shortcuts and notes on top.
 - **Compact overview** (default) with **Show all** for the full dump
 - **Symbolic icons**, **Fluent i18n** (9 languages), learning mode, custom notes
 
-## Quick start
+## Install from source
 
 Requires Rust + a COSMIC session. [`just`](https://github.com/casey/just) optional.
 
@@ -32,27 +34,42 @@ cd cosmic-ext-applet-cheatsheet
 just install    # binary + .desktop + icon + metainfo → ~/.local
 ```
 
-1. **Panel:** COSMIC Settings → Desktop → Panel/Dock → add **Cheat Sheet**
+1. **Panel / Dock:** COSMIC Settings → add **Cheat Sheet**
 2. **Keybind** (recommended Super+C) → Spawn:
    ```
    cosmic-ext-applet-cheatsheet --window
    ```
 
 ```sh
-just build      # cargo build --release
-just check      # clippy
-just uninstall  # remove ~/.local install
+just build
+just check
+just uninstall
 ```
 
-## Screenshots
+## Install with Flatpak (local)
 
-Open the sheet once on your machine, then drop images into `assets/` if you fork
-the README — for example:
+Needs `flatpak`, `flatpak-builder`, Flathub SDK 25.08, and the COSMIC Flatpak
+remote (`com.system76.Cosmic.BaseApp`).
 
 ```sh
-# with the sheet open on COSMIC:
-grim ~/Pictures/cosmic-cheatsheet.png
+just flatpak-install
 ```
+
+Then add the applet in Settings. For Super+C use:
+
+```
+flatpak run io.github.tomashaa.CosmicExtCheatsheet --window
+```
+
+Uninstall:
+
+```sh
+just flatpak-uninstall
+```
+
+> Flathub does not take panel applets; the long-term store path is
+> [`pop-os/cosmic-flatpak`](https://github.com/pop-os/cosmic-flatpak). This repo’s
+> manifest is for local install / that submission later.
 
 ## Config
 
@@ -69,7 +86,7 @@ grim ~/Pictures/cosmic-cheatsheet.png
 - Shortcut config live-reloads via `cosmic-config`
 - Corner-radius protocol disabled; rounding is drawn in-app
 - CI on GitHub Actions; `just vendor` for offline builds
-- Flatpak / COSMIC Store packaging: planned, not in this release
+- Local Flatpak recipe included; COSMIC Store packaging still upcoming
 
 Feedback and issues: <https://github.com/tomashaa/cosmic-ext-applet-cheatsheet/issues>
 

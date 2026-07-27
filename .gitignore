@@ -4,3 +4,5 @@ vendor/
 diag.txt
 *.log
 .DS_Store
+build-dir/
+.flatpak-builder/

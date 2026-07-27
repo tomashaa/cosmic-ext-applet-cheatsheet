@@ -36,6 +36,12 @@
     <keyword>cheatsheet</keyword>
     <keyword>cosmic</keyword>
   </keywords>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/tomashaa/cosmic-ext-applet-cheatsheet/main/assets/screenshot.jpg</image>
+      <caption>Right-edge cheat sheet over the desktop</caption>
+    </screenshot>
+  </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
     <release version="0.1.0" date="2026-07-27">
