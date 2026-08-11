@@ -78,6 +78,10 @@ pub struct Window {
     slide_target: f32,
     /// After slide-out finishes, exit the process.
     slide_closing: bool,
+    /// Set once the sheet has actually held keyboard focus. Guards click-outside
+    /// close: with `OnDemand` interactivity an `Unfocused` can arrive before the
+    /// compositor ever grants focus, which would slam the sheet shut on open.
+    had_focus: bool,
 }
 
 impl Default for Window {
@@ -114,6 +118,7 @@ impl Default for Window {
             slide_x: SLIDE_OFF,
             slide_target: SLIDE_OFF,
             slide_closing: false,
+            had_focus: false,
         }
     }
 }
@@ -122,6 +127,9 @@ impl Default for Window {
 pub enum Message {
     Surface(cosmic::surface::Action),
     SurfaceReady(Id),
+    /// The sheet's layer surface gained (`true`) or lost (`false`) focus.
+    /// Losing it means the user clicked elsewhere — that closes the sheet.
+    SurfaceFocus(Id, bool),
     Search(String),
     Launch(Vec<String>),
     /// Mouse entered/left a clickable row (`None` = left).
@@ -339,6 +347,12 @@ impl Window {
             }
             return Task::none();
         }
+        log::debug!(
+            "begin_close: slide_x={} surface={:?} windowed={}",
+            self.slide_x,
+            self.surface_id,
+            self.windowed
+        );
         self.sheet_open = true; // keep true until finish_close
         self.slide_closing = true;
         self.slide_target = SLIDE_OFF;
@@ -359,6 +373,7 @@ impl Window {
         }
         self.sheet_open = false;
         self.slide_closing = false;
+        self.had_focus = false;
         self.slide_x = SLIDE_OFF;
         self.slide_target = SLIDE_OFF;
         crate::ipc::release_open_marker();
@@ -401,6 +416,7 @@ impl Window {
         }
         crate::ipc::clear_close_request();
         self.sheet_open = true;
+        self.had_focus = false;
         self.slide_x = SLIDE_OFF;
         self.slide_target = 0.0;
         self.slide_closing = false;
@@ -964,6 +980,24 @@ impl cosmic::Application for Window {
                 }
                 return focus;
             }
+            Message::SurfaceFocus(id, focused) => {
+                log::debug!(
+                    "layer focus: focused={focused} id={id:?} ours={:?} had_focus={} open={}",
+                    self.surface_id,
+                    self.had_focus,
+                    self.sheet_open
+                );
+                // Only our own sheet counts.
+                if self.surface_id != Some(id) {
+                    return Task::none();
+                }
+                if focused {
+                    self.had_focus = true;
+                } else if self.had_focus && self.sheet_open && !self.slide_closing {
+                    // Focus moved to another window => the user clicked outside.
+                    return self.begin_close();
+                }
+            }
             Message::ToggleLearning(b) => {
                 self.learning = b;
                 self.persist_settings();
@@ -1115,6 +1149,27 @@ impl cosmic::Application for Window {
                     cosmic::iced::Event::Window(window::Event::Opened { .. }) => {
                         Some(Message::SurfaceReady(id))
                     }
+                    // Click-outside close. We cannot receive clicks landing
+                    // outside our own surface, so focus loss is the signal —
+                    // and it costs no fullscreen grab (see `open_sheet`).
+                    //
+                    // NB: a layer surface never gets `window::Event::Focused` /
+                    // `Unfocused` — iced emits those only for xdg toplevels.
+                    // Keyboard enter/leave on a layer surface arrives as a
+                    // Wayland platform event carrying its own surface id.
+                    cosmic::iced::Event::PlatformSpecific(
+                        cosmic::iced::event::PlatformSpecific::Wayland(
+                            cosmic::iced::event::wayland::Event::Layer(layer_event, _, sid),
+                        ),
+                    ) => match layer_event {
+                        cosmic::iced::event::wayland::LayerEvent::Focused => {
+                            Some(Message::SurfaceFocus(sid, true))
+                        }
+                        cosmic::iced::event::wayland::LayerEvent::Unfocused => {
+                            Some(Message::SurfaceFocus(sid, false))
+                        }
+                        _ => None,
+                    },
                     _ => None,
                 }
             })
