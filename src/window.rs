@@ -987,13 +987,22 @@ impl cosmic::Application for Window {
                     self.had_focus,
                     self.sheet_open
                 );
-                // Only our own sheet counts.
-                if self.surface_id != Some(id) {
+                // Do NOT require `surface_id` to be set yet. `Focused` can beat
+                // `SurfaceReady` to us — in panel-applet mode it reliably does,
+                // and requiring the id here dropped the only `Focused` we get,
+                // leaving `had_focus` false so the sheet never closed.
+                // A LayerEvent only ever fires for a layer surface, and the
+                // sheet is the only one we create, so an id we do not yet know
+                // is still ours. Reject only ids we know are *not*.
+                if self.surface_id.is_some() && self.surface_id != Some(id) {
+                    return Task::none();
+                }
+                if !self.sheet_open {
                     return Task::none();
                 }
                 if focused {
                     self.had_focus = true;
-                } else if self.had_focus && self.sheet_open && !self.slide_closing {
+                } else if self.had_focus && !self.slide_closing {
                     // Focus moved to another window => the user clicked outside.
                     return self.begin_close();
                 }
