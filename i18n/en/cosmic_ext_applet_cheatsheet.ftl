@@ -90,6 +90,7 @@ ui-actions = ACTIONS  (clickable)
 ui-add = Add
 ui-command_ph = Command (optional)
 ui-compact = Compact overview (like Super+P)
+ui-dense = Dense rows (shortcut on the same line)
 ui-compact_btn = Compact
 ui-custom_empty = No custom shortcuts yet.
 ui-editor_title = Custom shortcuts

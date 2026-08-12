@@ -90,6 +90,7 @@ ui-actions = ACTIES  (klikbaar)
 ui-add = Toevoegen
 ui-command_ph = Opdracht (optioneel)
 ui-compact = Compact overzicht (zoals Super+P)
+ui-dense = Compacte regels (sneltoets op dezelfde regel)
 ui-compact_btn = Compact
 ui-custom_empty = Nog geen aangepaste sneltoetsen.
 ui-editor_title = Aangepaste sneltoetsen

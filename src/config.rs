@@ -109,6 +109,11 @@ pub struct Settings {
     /// Compact overview (merge directions / workspaces, hide media keys). Default on.
     #[serde(default = "default_true")]
     pub compact: bool,
+    /// Dense rows: put the label and its key badge on ONE line instead of two,
+    /// roughly halving row height (the old GTK Super+P sheet looked like this).
+    /// Off by default so the layout does not change under existing users.
+    #[serde(default)]
+    pub dense: bool,
     /// UI language override (`nor`, `eng`, …). `None` = system locale (+ legacy fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
@@ -120,6 +125,7 @@ impl Default for Settings {
             remember: true,
             learning: false,
             compact: true,
+            dense: false,
             lang: None,
         }
     }

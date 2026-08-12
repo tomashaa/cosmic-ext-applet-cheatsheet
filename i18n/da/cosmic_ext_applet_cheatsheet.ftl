@@ -90,6 +90,7 @@ ui-actions = HANDLINGER  (klikbare)
 ui-add = Tilføj
 ui-command_ph = Kommando (valgfrit)
 ui-compact = Kompakt oversigt (som Super+P)
+ui-dense = Tætte rækker (genvejen på samme linje)
 ui-compact_btn = Kompakt
 ui-custom_empty = Ingen egne genveje endnu.
 ui-editor_title = Egne genveje

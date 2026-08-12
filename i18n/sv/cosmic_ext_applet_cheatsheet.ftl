@@ -90,6 +90,7 @@ ui-actions = ÅTGÄRDER  (klickbara)
 ui-add = Lägg till
 ui-command_ph = Kommando (valfritt)
 ui-compact = Kompakt översikt (som Super+P)
+ui-dense = Täta rader (kortkommandot på samma rad)
 ui-compact_btn = Kompakt
 ui-custom_empty = Inga egna genvägar ännu.
 ui-editor_title = Egna genvägar

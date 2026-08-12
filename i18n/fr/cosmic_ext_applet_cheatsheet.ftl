@@ -90,6 +90,7 @@ ui-actions = ACTIONS  (cliquables)
 ui-add = Ajouter
 ui-command_ph = Commande (facultatif)
 ui-compact = Vue compacte (comme Super+P)
+ui-dense = Lignes denses (raccourci sur la même ligne)
 ui-compact_btn = Compact
 ui-custom_empty = Aucun raccourci personnalisé.
 ui-editor_title = Raccourcis personnalisés

@@ -66,6 +66,8 @@ pub struct Window {
     learning: bool,
     /// Compact overview (merge directions / workspaces, hide media keys).
     compact: bool,
+    /// Dense rows (label + badge on one line).
+    dense: bool,
     /// Running as a standalone window (`--window`) rather than a panel applet.
     windowed: bool,
     /// Layer-surface id for a clean close.
@@ -112,6 +114,7 @@ impl Default for Window {
             learned: config::load_learned(),
             learning: settings.learning,
             compact: settings.compact,
+            dense: settings.dense,
             windowed: false,
             surface_id: None,
             sheet_open: false,
@@ -146,6 +149,8 @@ pub enum Message {
     ToggleLearned(String, bool),
     ToggleLearning(bool),
     ToggleCompact(bool),
+    /// Dense rows: label + key badge on one line.
+    ToggleDense(bool),
     /// Language picker index into [`i18n::LANGS`].
     SetLang(usize),
     ShortcutsChanged,
@@ -183,8 +188,13 @@ fn non_empty(s: &str) -> Option<String> {
     }
 }
 
-/// One cheat-sheet row: label above, shortcut badge below (right-aligned) so
-/// long key strings never overlap the description.
+/// One cheat-sheet row.
+///
+/// Default: label above, shortcut badge below (right-aligned) so long key
+/// strings never overlap the description.
+/// `dense`: both on ONE line, which roughly halves the row height. The badge
+/// keeps its natural width and the label takes the rest, so a long key string
+/// squeezes the label instead of wrapping under it.
 fn row_view(
     label: String,
     keys: String,
@@ -194,6 +204,7 @@ fn row_view(
     hovered: bool,
     learned: bool,
     show_checkbox: bool,
+    dense: bool,
 ) -> Element<'static, Message> {
     let clickable = argv.is_some();
     let id = keys.clone();
@@ -246,24 +257,36 @@ fn row_view(
     }
     label_row.push(label_widget.width(Length::Fill).into());
 
-    let content = widget::column::with_children(vec![
-        widget::row::with_children(label_row)
+    let content: Element<Message> = if dense {
+        // One line: label stretches, badge sits at the right end.
+        let mut cells = label_row;
+        cells.push(badge.into());
+        widget::row::with_children(cells)
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
-            .into(),
-        widget::container(badge)
-            .width(Length::Fill)
-            .align_x(cosmic::iced::alignment::Horizontal::Right)
-            .into(),
-    ])
-    .spacing(4);
+            .into()
+    } else {
+        widget::column::with_children(vec![
+            widget::row::with_children(label_row)
+                .spacing(8)
+                .align_y(cosmic::iced::Alignment::Center)
+                .into(),
+            widget::container(badge)
+                .width(Length::Fill)
+                .align_x(cosmic::iced::alignment::Horizontal::Right)
+                .into(),
+        ])
+        .spacing(4)
+        .into()
+    };
 
+    let vpad = if dense { 3.0 } else { 6.0 };
     let mut cell = widget::container(content)
         .width(Length::Fill)
         .padding(cosmic::iced::Padding {
-            top: 6.0,
+            top: vpad,
             right: 8.0,
-            bottom: 6.0,
+            bottom: vpad,
             left: 8.0,
         });
 
@@ -491,6 +514,7 @@ impl Window {
             remember: self.remember,
             learning: self.learning,
             compact: self.compact,
+            dense: self.dense,
             lang: Some(self.lang.to_string()),
         });
     }
@@ -618,6 +642,7 @@ impl Window {
                     hovered,
                     is_learned,
                     self.learning,
+                    self.dense,
                 ));
                 if clickable {
                     ci += 1;
@@ -669,6 +694,7 @@ impl Window {
                     hovered,
                     is_learned,
                     self.learning,
+                    self.dense,
                 ));
                 if clickable {
                     ci += 1;
@@ -765,6 +791,20 @@ impl Window {
                     .on_toggle(Message::ToggleCompact)
                     .into(),
                 widget::text(i18n::tr("ui.compact")).into(),
+            ])
+            .spacing(8)
+            .align_y(cosmic::iced::Alignment::Center)
+            .into(),
+        );
+
+        // Setting: dense rows — halves row height by putting the key badge
+        // on the same line as the label (like the old GTK Super+P sheet).
+        children.push(
+            widget::row::with_children(vec![
+                widget::toggler(self.dense)
+                    .on_toggle(Message::ToggleDense)
+                    .into(),
+                widget::text(i18n::tr("ui.dense")).into(),
             ])
             .spacing(8)
             .align_y(cosmic::iced::Alignment::Center)
@@ -1016,6 +1056,10 @@ impl cosmic::Application for Window {
                 self.compact = b;
                 self.persist_settings();
                 self.selected = 0;
+            }
+            Message::ToggleDense(b) => {
+                self.dense = b;
+                self.persist_settings();
             }
             Message::SetLang(i) => {
                 if let Some(code) = i18n::LANGS.get(i).copied() {

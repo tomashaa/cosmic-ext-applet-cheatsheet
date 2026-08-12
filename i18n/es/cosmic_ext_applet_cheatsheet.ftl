@@ -90,6 +90,7 @@ ui-actions = ACCIONES  (clicables)
 ui-add = Añadir
 ui-command_ph = Comando (opcional)
 ui-compact = Vista compacta (como Super+P)
+ui-dense = Filas densas (atajo en la misma línea)
 ui-compact_btn = Compacta
 ui-custom_empty = Aún no hay atajos personalizados.
 ui-editor_title = Atajos personalizados

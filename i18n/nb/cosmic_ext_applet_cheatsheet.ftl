@@ -90,6 +90,7 @@ ui-actions = HANDLINGAR  (klikkbare)
 ui-add = Legg til
 ui-command_ph = Kommando (valfritt)
 ui-compact = Kompakt oversikt (som Super+P)
+ui-dense = Tette rader (snarvegen på same linje)
 ui-compact_btn = Kompakt
 ui-custom_empty = Ingen eigne snarvegar enno.
 ui-editor_title = Eigne snarvegar

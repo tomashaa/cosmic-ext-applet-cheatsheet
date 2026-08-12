@@ -90,6 +90,7 @@ ui-actions = AZIONI  (cliccabili)
 ui-add = Aggiungi
 ui-command_ph = Comando (opzionale)
 ui-compact = Panoramica compatta (come Super+P)
+ui-dense = Righe dense (scorciatoia sulla stessa riga)
 ui-compact_btn = Compatta
 ui-custom_empty = Nessuna scorciatoia personalizzata.
 ui-editor_title = Scorciatoie personalizzate

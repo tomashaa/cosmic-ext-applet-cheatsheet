@@ -90,6 +90,7 @@ ui-actions = AKTIONEN  (anklickbar)
 ui-add = Hinzufügen
 ui-command_ph = Befehl (optional)
 ui-compact = Kompakte Übersicht (wie Super+P)
+ui-dense = Kompakte Zeilen (Tastenkürzel in derselben Zeile)
 ui-compact_btn = Kompakt
 ui-custom_empty = Noch keine eigenen Kürzel.
 ui-editor_title = Eigene Tastenkürzel
