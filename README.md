@@ -27,6 +27,8 @@ own extra shortcuts and notes on top.
 ## Install from source
 
 Requires Rust + a COSMIC session. [`just`](https://github.com/casey/just) optional.
+Build deps: `pkg-config`, `libxkbcommon-dev`, `libwayland-dev` (Debian/Ubuntu/Pop!_OS
+names; on Fedora `libxkbcommon-devel` and `wayland-devel`).
 
 ```sh
 git clone https://github.com/tomashaa/cosmic-ext-applet-cheatsheet.git

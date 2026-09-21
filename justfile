@@ -3,7 +3,7 @@ appid := "io.github.tomashaa.CosmicExtCheatsheet"
 
 # Default local install prefix; Flatpak uses `just prefix=/app install`.
 rootdir := ""
-prefix := env_var_or_default("PREFIX", home / ".local")
+prefix := env_var_or_default("PREFIX", env_var("HOME") / ".local")
 base-dir := absolute_path(clean(rootdir / prefix))
 
 bindir := base-dir / "bin"
